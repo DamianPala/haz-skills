@@ -64,6 +64,8 @@ Skip explanation when:
 - The step is self-evident (`mkdir`, `cd`, `git clone`)
 - You already explained a similar pattern earlier in the post
 
+When a config block, command, or decision needs more context than a single sentence, use a bold-labeled callout (e.g., **About X:**, **What this does:**, **Security notes:**, **Warning:**). Pick a label that fits the content — don't force a fixed set. Keep these close to the thing they explain, not in a separate section.
+
 ## Clarity rules (from writing-clearly-and-concisely)
 - Use active voice.
 - Prefer concrete, specific language.

@@ -1,6 +1,6 @@
 ---
 name: technical-blog
-description: Write human-sounding technical blog tutorials for Linux tools: concise, accurate, and practical.
+description: "Write human-sounding technical blog tutorials for Linux tools: concise, accurate, and practical."
 ---
 
 # Technical Blog (Linux)

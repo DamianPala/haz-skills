@@ -1,6 +1,6 @@
 ---
 name: tg-digest
-description: Export and summarize Telegram channels for a given time period. AI-driven flow asks for channel, date range, and focus areas, then generates a structured digest. Triggers: $tg-digest, "telegram summary", "podsumuj kanał TG", "tg digest".
+description: "Export and summarize Telegram channels for a given time period. AI-driven flow asks for channel, date range, and focus areas, then generates a structured digest. Triggers: $tg-digest, telegram summary, podsumuj kanał TG, tg digest."
 ---
 
 # TG Digest Skill

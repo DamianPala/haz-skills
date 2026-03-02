@@ -1,53 +1,65 @@
 # Pyproject snippets
 
-Use these snippets only when the user asks for them or when they are clearly relevant to the request. Copy the exact blocks as needed and adjust other block if needed.
+Use these snippets only when the user asks for them or when they are clearly relevant to the request. Copy the exact blocks as needed and adjust as needed.
 
-## Hatch default env (uv + common dev tools)
+## Build system (uv_build)
+
+Always scaffold with `uv init --package` to get the correct version pinning for the installed uv. The generated `[build-system]` block looks like this (example, do not hardcode):
 
 ```toml
-[tool.hatch.envs.default]
-type = "virtual"
-path = ".venv"
-installer = "uv"
-skip-install = false
-features = ["test"]
-dependencies = [
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+```
+
+If you must create `pyproject.toml` manually (no `uv init`), run `uv init --package _tmp` in `/tmp`, copy the `[build-system]` block, then delete the temp project.
+
+## Dependency groups (PEP 735)
+
+Unified variant (small projects):
+
+```toml
+[dependency-groups]
+dev = [
   "ruff",
   "mypy",
-  "pytest",
+  "pytest>=8.0",
   "pytest-cov",
 ]
 ```
 
-## Optional test feature (required when using `features = ["test"]`)
+Split variant (when test/lint groups are reused separately):
 
 ```toml
-[project.optional-dependencies]
+[dependency-groups]
+dev = [
+  {include-group = "lint"},
+  {include-group = "test"},
+]
+lint = [
+  "ruff",
+  "mypy",
+]
 test = [
   "pytest>=8.0",
+  "pytest-cov",
 ]
 ```
 
-## Click completion (Hatch post-install, bash)
+Add via CLI: `uv add --group dev ruff mypy` or `uv add --group test pytest pytest-cov`.
 
-```toml
-[tool.hatch.envs.default]
-post-install-commands = [
-  "bash -lc 'dest=\"$XDG_DATA_HOME\"; if [ -z \"$dest\" ]; then dest=\"$HOME/.local/share\"; fi; dest=\"$dest/bash-completion/completions/<app-name>\"; mkdir -p \"$(dirname \"$dest\")\"; _<APP_NAME_UPPER>_COMPLETE=bash_source <app-name> > \"$dest\"'",
-]
+Sync a specific group: `uv sync --group test`. Sync all groups: `uv sync --all-groups`.
+
+## Click completion
+
+Copy `references/_completion.py` into the package and wire it:
+
+```python
+from myapp._completion import add_completion_command
+add_completion_command(cli, "myapp")
 ```
 
-Notes:
-- Replace `<app-name>` with the CLI command name (e.g., `sampleapp`).
-- Replace `<APP_NAME_UPPER>` with the uppercased CLI name and non-alphanumerics as `_` (e.g., `SAMPLEAPP`).
-- This generates a completion script file; the shell still needs to load user completions (see skill instructions).
-
-## Disable SPDX headers in Hatch templates
-
-```toml
-[template.licenses]
-headers = false
-```
+Usage: `myapp generate-completion --install` (auto-installs) or `myapp generate-completion [bash|zsh|fish]` (stdout).
 
 ## Ruff defaults
 

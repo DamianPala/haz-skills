@@ -1,6 +1,6 @@
 ---
-name: python-app
-description: General-purpose Python apps (CLI tools, services, libraries, scripts, automation) for Ubuntu >= 24.04 and Python >= 3.12. Use for templates, project structure, implementation, refactors, or best-practice setup.
+name: python-app-uv
+description: General-purpose Python apps (CLI tools, services, libraries, scripts, automation) for Ubuntu >= 22.04 and Python >= 3.12. Uses uv for scaffolding, project management, builds, and dependency resolution. Use for templates, project structure, implementation, refactors, or best-practice setup.
 ---
 
 # Model-agnostic guidance
@@ -20,6 +20,7 @@ Scope and targets:
 - OS: Ubuntu >= 22.04
 - Python: >= 3.12
 - App types: CLI, library, service, automation
+- Toolchain: uv (scaffolding, dependency management, builds, running)
 - Priorities: clarity, maintainability, minimal dependencies
 
 ## Compatibility and features
@@ -34,17 +35,16 @@ Scope and targets:
 - Clarify app type and goal.
 - Define scope: MVP features, out-of-scope items, expected users.
 - Choose structure: single-file, small package, or service layout.
-- Run `hatch new <name>` without `--cli` and wire the CLI manually in `src/<app>/cli.py` plus `[project.scripts]` when needed.
-- After `hatch new`, update `pyproject.toml` with required tool sections (Hatch envs, pytest, lint/type configs) from `references/pyproject-snippets.md` when relevant to the request.
+- For mini-package/package: run `uv init --package <name>` to scaffold, then wire the CLI manually in `src/<app>/cli.py` plus `[project.scripts]`.
+- After scaffolding, update `pyproject.toml` with dependency groups, tool configs from `references/pyproject-snippets.md` when relevant to the request.
 - Define interfaces: CLI args, public API functions, config, env vars.
 - Implement core logic with logging and validation; add tests if requested.
-- Provide run/usage instructions (use Hatch for package and mini-package apps).
+- Provide run/usage instructions using `uv run`.
 
 ## System requirements check (before building)
 
 - Confirm Ubuntu and Python >= 3.12 are available.
-- For package apps, ensure `uv` and `hatch` is installed and on PATH.
-- Confirm Hatch config disables SPDX headers when using `hatch new` (set `[template.licenses] headers = false` in `~/.config/hatch/config.toml`).
+- Ensure `uv` is installed and on PATH (`uv --version`, expect >= 0.10).
 - If any requirement is missing, stop and ask the user how to proceed.
 
 ## Pre-build questions (ask only if not already answered)
@@ -69,11 +69,13 @@ Ask the minimum set of questions needed to start. Skip anything already specifie
 - Keep modules small and focused.
 - Add `--help` and clear error messages.
 - Return non-zero exit codes on failure for CLI apps.
-- Create the project with Hatchling first, then build the app inside that structure. Add necessary modules if needed.
-- For mini-package and package apps, use Hatch to run the app and tests (e.g., `hatch run ...` or `hatch shell`).
-- For Click CLIs, enable completions by default (do not skip unless the user opts out): add the Hatch `post-install-commands` hook that writes a bash completion file under `"$XDG_DATA_HOME"/bash-completion/completions/<app-name>` (falls back to `~/.local/share`) using `_APP_NAME_COMPLETE=bash_source` (see `references/pyproject-snippets.md`), and include shell setup instructions in deliverables.
+- For mini-package/package: scaffold with `uv init --package`, then build inside that structure. Add necessary modules as needed.
+- Run the app with `uv run <app>`, run tests with `uv run pytest`.
+- For distribution: `uv build` to create sdist/wheel, `uv publish` to upload to PyPI.
+- For global CLI install (like pipx): `uv tool install .` from the project directory, or `uv tool install <package>` from PyPI.
+- Use `[dependency-groups]` (PEP 735) for dev/test tools instead of `[project.optional-dependencies]` or tool-specific env configs. See `references/pyproject-snippets.md`.
+- For Click CLIs, copy `references/_completion.py` into the package and call `add_completion_command(cli, '<app-name>')`. This adds a `generate-completion` subcommand that outputs completion scripts to stdout, with `--install` to auto-install to the correct OS path.
 - For script layout CLIs using `argparse`, enable argcomplete by default (unless user opts out): add `# PYTHON_ARGCOMPLETE_OK` before imports, add a safe `argcomplete` import after imports, and call `argcomplete.autocomplete(parser)` after building the parser.
-- If using Hatch env `features` (e.g., `features = ["test"]`), ensure matching entries exist under `[project.optional-dependencies]`.
 
 ## Project layouts
 
@@ -86,26 +88,29 @@ script:
 
 mini-package:
 
-- Generate with Hatchling using a `src/` layout.
-- `pyproject.toml`
-- `src/app/__init__.py`
-- `src/app/cli.py`
+- Scaffold with `uv init --package <name>`.
+- `pyproject.toml` (uv_build backend, dependency groups)
+- `src/<app>/__init__.py`
+- `src/<app>/cli.py`
+- `README.md`
 - Use `click` for CLI entrypoints.
+- Add Click as dependency: `uv add click`.
+- Add dev tools via dependency groups: `uv add --group dev ruff mypy pytest pytest-cov`.
 - Configure `pyproject.toml` according to `references/pyproject-snippets.md` and apply only the relevant blocks.
-- Run the app and tests via Hatch.
+- Run the app and tests via `uv run`.
 
 package:
 
-- Generate with Hatchling using a `src/` layout.
-- `pyproject.toml`
-- `src/app/__init__.py`
-- `src/app/cli.py` (only if the app exposes a CLI)
-- `src/app/core.py` (core logic; can be renamed if a domain-specific module fits better)
+- Scaffold with `uv init --package <name>`.
+- `pyproject.toml` (uv_build backend, dependency groups)
+- `src/<app>/__init__.py`
+- `src/<app>/cli.py` (only if the app exposes a CLI)
+- `src/<app>/core.py` (core logic; can be renamed if a domain-specific module fits better)
 - Optional modules as needed (e.g., `config.py`, `service.py`).
 - `tests/` (only if requested)
-- `README.md` (only if requested)
+- `README.md`
 - Configure `pyproject.toml` according to `references/pyproject-snippets.md` and apply only the relevant blocks.
-- Run the app and tests via Hatch.
+- Run the app and tests via `uv run`.
 
 ## Config pattern
 
@@ -120,35 +125,94 @@ package:
 - Catch exceptions at top-level; surface helpful messages.
 - Use f-strings for all logging messages (no %-style formatting).
 
+## README structure (mini-package and package layouts)
+
+Generate a `README.md` with these sections. Skip sections that don't apply (e.g., no "Tests" if no tests, no "Shell completions" if no CLI). Keep it concise, no filler.
+
+```
+# <app-name>
+
+<one-line description from pyproject.toml>
+
+## Setup (local development)
+
+uv sync
+
+## Development
+
+Run commands inside the venv (auto-syncs dependencies):
+
+uv run <command>
+
+Start an interactive shell with the venv active:
+
+uv run bash
+
+## Usage
+
+uv run <app> <example commands with realistic args>
+
+## Install globally
+
+uv tool install .
+
+After install, run directly:
+<app> <example>
+
+## Tests (if tests exist)
+
+uv run pytest
+
+## Shell completions (if Click CLI)
+
+<app> generate-completion --install
+```
+
+Notes:
+- "Setup" section uses `uv sync` (syncs local venv, not a global install).
+- "Install globally" uses `uv tool install .` (makes the command available system-wide, like pipx).
+- Usage examples should use `uv run <app>` (works without global install).
+- After global install, examples use bare `<app>` (no `uv run`).
+
 ## Deliverables checklist
 
 - Python code with a clear entrypoint
-- Example command(s) or usage snippet
 - Sample input/output (if applicable)
-- Tests or docs only if requested
+- Tests only if requested
 - Copy `assets/gitignore/.gitignore` as the project `.gitignore` for all layout types.
-- After creating the project, include run instructions. For Hatch-based mini-package/package apps: tell the user to run `hatch shell`, then invoke the CLI by its command name (e.g., `sampleapp ...`). Include at least one concrete example command.
+- `README.md` following the README structure above (mini-package and package layouts).
 - Use `python` (not `python3`) in all deliverable commands because the default is uv.
-- For Click CLIs, confirm the completion hook exists in `pyproject.toml`, and explain that the post-install hook generates a completion file and the shell must load user completions, with a minimal one-line `~/.bashrc` example when needed.
+- For Click CLIs, confirm `_completion.py` is included and `add_completion_command()` is called.
 - For script CLIs using `argparse` + argcomplete, include user-facing instructions for installing and enabling system-wide completion (e.g., `python -m pip install argcomplete --break-system-packages` and `sudo activate-global-python-argcomplete`).
+- Commit `uv.lock` to version control for reproducible builds.
 
 ## Pre-finish checklist (when building a project)
 
 - Layout matches requested type (script/mini-package/package)
 - `requires-python` matches the target
+- `[build-system]` uses `uv_build`
 - Dependencies listed in `[project.dependencies]`
+- Dev/test tools in `[dependency-groups]` (PEP 735), not in `[project.optional-dependencies]`
 - CLI entrypoint set in `[project.scripts]` if a CLI is provided
 - Avoid deprecated features or compatibility shims (e.g., skip `from __future__ import annotations`)
-- If tests are added/requested: pytest snippet in `pyproject.toml` and pytest installed via Hatch env + optional dependencies (from `references/pyproject-snippets.md`)
-- If using Hatch env features: ensure matching `[project.optional-dependencies]` entries exist
-- README updated with run instructions and at least one example command
+- If tests are added/requested: pytest snippet in `pyproject.toml` and pytest in a dependency group (from `references/pyproject-snippets.md`)
+- `README.md` present with sections from README structure template
+- `uv.lock` present and committed to version control
 
 ## Troubleshooting
 
-## uv cache
+### uv cache
 
-If Hatch/uv fails due to cache permission errors, rerun with a writable cache directory:
-`UV_CACHE_DIR=<writable-path> hatch run pytest` (or `hatch shell` / `hatch run ...`).
+If uv fails due to cache permission errors, set a writable cache directory:
+`UV_CACHE_DIR=<writable-path> uv run pytest`
+
+### Dependency sync
+
+If dependencies seem stale after editing `pyproject.toml` manually, run `uv sync` to update the lockfile and venv.
+
+### Python version mismatch
+
+If `uv init` picks a higher Python than intended, override with `uv init --package <name> --python 3.12` or edit `requires-python` in `pyproject.toml` and run `uv sync`.
 
 ## Example: simple script CLI (argparse + argcomplete)
 

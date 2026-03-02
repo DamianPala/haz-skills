@@ -4,7 +4,6 @@
 
 import argparse
 import logging
-import sys
 from dataclasses import dataclass
 
 try:
@@ -30,7 +29,7 @@ class RepeatResult:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="sampleapp4",
+        prog="sampleapp",
         description="Sample CLI app with three commands.",
     )
     parser.add_argument(
@@ -88,13 +87,13 @@ def cmd_greet(name: str, *, upper: bool) -> GreetResult:
     message = f"Hello, {name}!"
     if upper:
         message = message.upper()
-    logging.info("Generated greeting for %s", name)
+    logging.info(f"Generated greeting for {name}")
     return GreetResult(message=message)
 
 
 def cmd_add(a: int, b: int) -> AddResult:
     total = a + b
-    logging.info("Computed sum %s", total)
+    logging.info(f"Computed sum {total}")
     return AddResult(total=total)
 
 
@@ -102,7 +101,7 @@ def cmd_repeat(text: str, count: int, *, sep: str) -> RepeatResult:
     if count < 1:
         raise ValueError("count must be >= 1")
     output = sep.join([text] * count)
-    logging.info("Repeated text %d times", count)
+    logging.info(f"Repeated text {count} times")
     return RepeatResult(output=output)
 
 
@@ -134,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run(args)
     except ValueError as exc:
-        logging.error("%s", exc)
+        logging.error(f"{exc}")
         return 2
 
 

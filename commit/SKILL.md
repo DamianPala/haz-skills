@@ -5,6 +5,14 @@ description: "Generate Conventional Commit messages from staged changes. Analyze
 
 # Commit
 
+## Rules
+
+- Never `--no-verify`, never force push, never amend pushed commits without asking
+- Never commit secrets or add AI attribution trailers (Co-Authored-By, etc.)
+- Respect repo's commitlint/husky rules and AGENTS.md commit mode settings
+- One logical change per commit
+- WHY not WHAT ("support new auth provider" not "add import X"). No generic messages, no hallucinated changes
+
 ## Modes
 
 | Mode | Trigger | Behavior |
@@ -55,10 +63,12 @@ From `git diff --cached`, determine:
 
 **Autonomous mode:** Skip to Step 5.
 
-**Single:** Show message, ask "Commit? (y/edit/cancel)".
-**Batch:** Show full plan, ask "Execute all? (y/edit/cancel)".
+**Single:** Show staged files (`git diff --cached --stat`), the message, ask "Commit? (y/edit/cancel)".
+**Batch:** Show full plan with files per commit, ask "Execute all? (y/edit/cancel)".
 
-If **edit**: write to `/tmp/commit-message.md`, tell user path, wait for confirmation, read back and validate CC format.
+Use the platform's confirmation tool if available (e.g., `AskUserQuestion`), otherwise present as text and wait for response.
+
+If **edit**: write to a temp file (e.g., `tempfile.gettempdir() + '/commit-message.md'`), tell user path, wait for confirmation, read back and validate CC format.
 
 ### Step 5: Commit and confirm
 
@@ -68,10 +78,4 @@ If pre-commit hooks modify files, re-stage (`git add -u`) and retry. Hooks fail 
 
 Output: commit hash (short), subject, files changed, insertions/deletions. Do NOT push.
 
-## Rules
-
-- Never `--no-verify`, never force push, never amend pushed commits without asking
-- Never commit secrets or add AI attribution trailers (Co-Authored-By, etc.)
-- Respect repo's commitlint/husky rules and AGENTS.md commit mode settings
-- One logical change per commit
-- WHY not WHAT ("support new auth provider" not "add import X"). No generic messages, no hallucinated changes
+Never `--no-verify`. Never force push. Never commit secrets or AI trailers.

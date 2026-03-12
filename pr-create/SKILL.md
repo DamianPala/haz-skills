@@ -1,125 +1,67 @@
 ---
 name: pr-create
-description: "Create and update Pull Requests with structured descriptions generated from git diff and commit history. Supports GitHub (gh) and GitLab (glab). Triggers: $pr, $mr, 'create pr', 'create mr', 'write pr', 'make pr', 'open pr', 'update pr', 'zrob pr', 'otworz pr', 'zaktualizuj pr', 'pull request', 'merge request'. DO NOT TRIGGER for commit-only tasks or code review without PR creation."
+description: "Create and update Pull Requests with structured descriptions from git diff and commit history. Supports GitHub (gh) and GitLab (glab). Triggers: 'create pr', 'create mr', 'write pr', 'make pr', 'open pr', 'update pr', 'zrob pr', 'otworz pr', 'zaktualizuj pr', 'pull request', 'merge request'. DO NOT TRIGGER for commit-only tasks or code review without PR creation."
 ---
 
 # PR Create
 
-Create or update Pull Requests / Merge Requests with AI-generated descriptions based on the actual diff and commit history.
+## Rules
 
-## Prerequisites
+- Never force-push, never auto-merge, never auto-approve
+- Never create PRs to main/master from another person's branch without asking
+- Draft by default, ready only when explicitly requested
+- No AI attribution trailers (Co-Authored-By, etc.)
+- Use ALL commits since base, not just the latest
+- PR template over default structure when template exists
+- Focus on intent and impact, not obvious code changes
+- Specific test plans (`pytest -k test_auth`) not generic ("run the tests")
+- Trivial changes get trivial descriptions, not 3 paragraphs
 
-- At least one of: `gh` CLI, `glab` CLI, or a GitHub/GitLab MCP server (e.g., `mcp__github`, `mcp__gitlab`)
-- A git repo on a feature branch (not main/master). If not in a git repo, check if the user mentioned a repo path and `cd` into it.
-- On Windows: use Git Bash or WSL for shell commands
+Create or update Pull/Merge Requests with descriptions generated from diff and commit history.
 
 ## Platform detection
 
-Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli": "gh"|"glab", "host": "...", "method": "..."}`. If detection fails and a GitHub/GitLab MCP is available, use that instead.
+Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli": "gh"|"glab", "host": "...", "method": "..."}`. Abort if detection fails (neither CLI authenticated).
 
 ## Modes
 
-Detect mode from the user's message:
-
 | Mode | Trigger | Behavior |
 |------|---------|----------|
-| **create** (default) | "create", "open", "write", "make", "zrob", "otworz" | New PR |
+| **create** (default) | "create", "open", "write", "make", "zrob", "otworz" | New PR, draft by default |
 | **update** | "update", "refresh", "zaktualizuj", "popraw" | Edit existing PR description |
-| **draft** | add `--draft` if user says "draft" | Create as draft |
 
-Default to **create** + **draft** when no explicit mode is given (safer default).
+Default to **create** as **draft** when no explicit mode is given.
 
 ## Workflow
 
 ### Step 1: Validate state
 
-```bash
-# Current branch
-BRANCH=$(git branch --show-current)
-
-# Abort if on main/master/develop
-# Abort if no commits ahead of base
-
-# Detect base branch
-BASE=$(git config "branch.${BRANCH}.merge-base" 2>/dev/null \
-  || git config "branch.${BRANCH}.gh-merge-base" 2>/dev/null \
-  || echo "")
-if [ -z "$BASE" ]; then
-  # Try default branch from remote
-  BASE=$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null \
-    || glab repo view --json default_branch --jq '.default_branch' 2>/dev/null \
-    || git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' \
-    || echo "main")
-fi
-
-# Verify commits exist
-AHEAD=$(git rev-list --count "${BASE}..HEAD")
-# If 0, abort: "No commits ahead of ${BASE}. Nothing to PR."
-```
-
-For **update** mode, also check:
-```bash
-# Find existing PR for current branch
-PR_NUMBER=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null \
-  || glab mr list --source-branch "$BRANCH" --json iid --jq '.[0].iid' 2>/dev/null)
-# If empty, offer to create instead
-```
+- Current branch from `git branch --show-current`. Abort if on main/master/develop
+- Base branch: check `branch.<name>.merge-base` git config, then remote default branch (`gh repo view` / `glab repo view` / `git remote show origin`), fallback to `main`
+- Count commits ahead: `git rev-list --count <base>..HEAD`. If 0, abort: "No commits ahead of <base>"
+- **Update mode**: find existing PR (`gh pr list --head <branch>` / `glab mr list --source-branch <branch>`). If none, offer to create instead
 
 ### Step 2: Gather context
 
-Run these in parallel:
+Run in parallel:
 
-```bash
-# Full diff against base
-git diff "${BASE}...HEAD"
+- `git diff <base>...HEAD` — full diff
+- `git log --format='### %s%n%n%b' <base>..HEAD` — commits with bodies
+- `git diff --stat <base>...HEAD` — changed files summary
+- PR template: `.github/PULL_REQUEST_TEMPLATE.md`, `.github/pull_request_template.md`, `docs/pull_request_template.md`
+- `git status --porcelain` — uncommitted changes
 
-# Commit log with bodies
-git log --format='### %s%n%n%b' "${BASE}..HEAD"
-
-# Changed files summary
-git diff --stat "${BASE}...HEAD"
-
-# Check for repo PR template
-cat .github/PULL_REQUEST_TEMPLATE.md 2>/dev/null \
-  || cat .github/pull_request_template.md 2>/dev/null \
-  || cat docs/pull_request_template.md 2>/dev/null \
-  || echo ""
-
-# Check for uncommitted changes
-git status --porcelain
-```
-
-If there are uncommitted changes, warn the user: "You have uncommitted changes that won't be included in the PR. Commit or stash first?"
+If uncommitted changes exist, warn: "You have uncommitted changes that won't be included in the PR."
 
 ### Step 3: Analyze and generate
 
-Based on the gathered context, generate the PR title and body.
+**Title**: CC format, ≤70 chars. Type from diff content: `feat` (new files/exports/routes), `fix` (incorrect behavior), `refactor` (structural, no behavior change), `docs` (only .md/docs), `test` (only tests), `chore`/`ci`/`build` (config/CI/build), `perf`, `style`. Scope from primary directory/module, omit if broad.
 
-**Title format:** Conventional Commits, under 70 characters.
-
-```
-<type>(<scope>): <short description>
-```
-
-Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`, `style`, `build`.
-
-Detect type from the diff:
-- New files/exports/routes/endpoints → `feat`
-- Changes to existing logic that fix incorrect behavior → `fix`
-- Structural changes without behavior change → `refactor`
-- Only `.md`/docs files → `docs`
-- Only test files → `test`
-- Config/CI/build files only → `chore`/`ci`/`build`
-
-Scope: derive from the primary directory or module affected. Omit if changes span many areas.
-
-**Body structure:**
-
-If the repo has a PR template (from Step 2), fill it in with the analyzed content. When filling templates:
+**Body**: If repo has a PR template (from Step 2), fill it in:
 - Check applicable checkboxes (`- [x]`), leave others unchecked
-- For sections that don't apply, write `None` or `N/A` rather than deleting the section
-- For yes/no fields (e.g., "Security impact?", "Breaking change?"), answer based on the diff
-- Keep the template's structure intact so reviewers see a familiar format
+- For sections that don't apply, write `N/A` rather than deleting
+- For yes/no fields ("Security impact?", "Breaking change?"), answer from diff
+- Keep the template's structure intact
 
 Otherwise, use this structure:
 
@@ -138,7 +80,7 @@ Otherwise, use this structure:
 
 ## Not changed
 
-<Only for large PRs (>300 lines) where scope is ambiguous. 1-2 bullets clarifying what is explicitly out of scope, so reviewers don't waste time looking for it. Skip for small/medium changes.>
+<Only for large PRs (>300 lines) where scope is ambiguous. 1-2 bullets clarifying what is explicitly out of scope. Skip for small/medium changes.>
 
 ## Issues
 
@@ -151,79 +93,52 @@ Otherwise, use this structure:
 - [ ] Manual: verify X works as expected
 ```
 
-**Issue detection patterns:**
+**Issue detection**: scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. Use `Fixes` if context says fixes/closes/resolves, otherwise `Refs`.
 
-Scan branch name and commit messages for:
-- `#\d+` → GitHub/GitLab issue
-- `[A-Z]+-\d+` → Jira/Linear style (e.g., PROJ-123)
-- `fixes`, `closes`, `resolves` prefix → use `Fixes` keyword
-- Otherwise → use `Refs`
+**Scaling**: trivial (<30 lines): Summary + Test plan only. Medium (30-300 lines): add Changes. Large (>300 lines): all sections. Over 1000 lines: suggest splitting into smaller PRs.
 
-**Scaling rules:**
+### Step 4: Verify
 
-| Diff size | Title | Body |
-|-----------|-------|------|
-| Trivial (<30 lines, 1-2 files) | type: description | Summary (1 bullet) + Test plan |
-| Medium (30-300 lines) | type(scope): description | Summary + Changes + Test plan |
-| Large (>300 lines) | type(scope): description | Summary + Changes + Breaking changes* + Not changed + Issues + Test plan |
+**Grounding (mandatory):** Re-read `git diff --stat <base>...HEAD`.
+- Every file/change mentioned in the description must be traceable to actual diff
+- Type must match diff content, not assumed intent
+- Issue refs only from branch name or commit messages. Never invent
+- If high-quality CC commit messages exist, lean on them for the summary
 
-### Step 4: Present for review
+**Sanity:** No AI attribution trailers (Co-Authored-By, etc.) in the body. No filler phrases ("This PR improves the codebase", "comprehensive changes"). No restating obvious code changes ("Added import X to file Y").
 
-Before creating the PR, show the user the generated title and body:
+### Step 5: Present for review
+
+Show title, base/branch info, and body:
 
 ```
-Title: feat(auth): add SSO login via SAML
+Title: <type>(<scope>): <description>
+Base: <base> ← <branch> (<N> commits)
 
 Body:
 ## Summary
-- Add SAML-based SSO authentication flow for enterprise customers
-- Integrate with existing session management, no breaking changes
+- <what changed and why>
 
 ## Test plan
-- [ ] `make test` passes
-- [ ] Manual: login via SSO on staging
+- [ ] <specific test command>
+- [ ] Manual: <concrete verification step>
 ```
 
-If the repo has a test runner (e.g., `Makefile` with `test` target, `package.json` with `test` script, `pytest.ini`, `Cargo.toml`), suggest running tests: "Want to run tests before creating the PR?" Don't enforce, just offer.
+If repo has a test runner (`Makefile`, `package.json` test script, `pytest.ini`, `Cargo.toml`), offer: "Run tests before creating?" Don't enforce.
 
-Ask: "Create this PR? (y/edit/cancel)" or just proceed if the user said to create directly.
+Ask "Create PR? (y/edit/cancel)" — use the platform's confirmation tool if available (e.g., `AskUserQuestion`), otherwise present as text and wait for response.
 
-If the user picks **edit**: write the title and body to a temp file (e.g., `/tmp/pr-description.md`), tell them the path, and wait. Read the file back after they confirm they're done editing.
+If **edit**: write to a temp file (e.g., `tempfile.gettempdir() + '/pr-description.md'`), tell user path, wait for confirmation, read back.
 
-### Step 5: Create or update
+### Step 6: Create and confirm
 
-Push the branch if needed (`git push -u origin "$BRANCH"`). If remote is ahead, use `git push --force-with-lease` (never bare `--force`).
+Push branch if needed (`git push -u origin <branch>`). If remote ahead: `git push --force-with-lease` (never bare `--force`).
 
-Create or update using `gh pr create` / `glab mr create` (or `gh pr edit` / `glab mr update` for update mode). Key flags:
-- Always pass `--draft` unless user explicitly said "ready"
-- For `gh`: pass body via `--body-file -` with heredoc to avoid shell escaping issues
-- For `glab`: pass `--target-branch "$BASE"`
+Create/update with CLI:
+- Always `--draft` unless user explicitly said "ready"
+- `gh`: pass body via `--body-file` with heredoc
+- `glab`: pass `--target-branch <base>`
 
-### Step 6: Confirm
+Output: PR/MR URL, status (draft/ready), base branch, commit count.
 
-After creation/update, output:
-- PR/MR URL (clickable)
-- Status (draft/ready)
-- Base branch
-- Number of commits included
-
-## Rules
-
-- Never create PRs to main/master from another person's branch without asking
-- Never force-push as part of PR creation
-- Never auto-merge or auto-approve
-- If the diff is huge (>1000 lines), suggest splitting into smaller PRs before generating
-- Don't restate obvious code changes in the description ("Added import X to file Y"). Focus on intent and impact
-- Don't add filler phrases ("This PR improves the codebase", "comprehensive changes")
-- Keep the summary factual and concise, matching the user's communication style
-- If commit messages are high-quality Conventional Commits, lean on them for the summary
-- Include file counts and line stats only if they add value (large PRs)
-
-## Common mistakes to avoid
-
-- Generating description from only the latest commit (use ALL commits since base)
-- Missing unpushed branch (always check and push if needed)
-- Ignoring existing PR template in the repo
-- Creating a ready (non-draft) PR by default (prefer draft)
-- Verbose descriptions for trivial changes (3-line fix doesn't need 3 paragraphs)
-- Generic test plans ("run the tests") instead of specific commands
+Never force-push. Never auto-merge. Draft by default. No AI trailers.

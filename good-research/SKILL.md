@@ -1,34 +1,63 @@
 ---
-name: codex-research
-description: "Run web research via Codex CLI (OpenAI) with live web search. Two modes: default and quick with narrower scope. Produces structured multi-perspective reports with sourced findings and confidence levels. Triggers: $codex-research, 'codex research [topic]', 'research with codex', 'use codex for research', 'research this via codex', 'zrób research codexem', 'odpal codexa do researchu', 'zbadaj codexem [temat]', 'użyj codexa do researchu', 'codex zbadaj [temat]', 'puść research przez codexa', 'zbadaj temat [X] codexem', 'quick codex research [topic]', 'szybki research codexem [temat]', 'szybko zbadaj codexem [temat]', 'codex quick [topic]', 'fast research codex [topic]', 'krótki research codexem [temat]'."
+name: good-research
+description: "Run web research with live web search via multiple backends. Two modes: default (thorough) and quick (focused). Supports: current model, Codex, Sonnet, Haiku, Opus. Triggers: $good-research, 'research [topic]', 'zbadaj [temat]', 'zrób research [temat]', 'odpal research [temat]', 'research codexem [temat]', 'codex research [topic]', 'zbadaj codexem [temat]', 'research sonetem [temat]', 'sonnet research [topic]', 'research opusem [temat]', 'opus research [topic]', 'research haiku [temat]', 'quick research [topic]', 'szybki research [temat]', 'szybko zbadaj [temat]'. DO NOT TRIGGER for simple questions without research intent."
 ---
 
-# Codex Research
+# Research
 
-Dispatch a research task to `codex exec` with live web search, then present findings.
+Dispatch a web research task to a chosen backend, then present findings.
+
+## Backends
+
+| Backend | Trigger keywords | Execution method |
+|---------|-----------------|------------------|
+| **self** (default) | no backend specified | Agent tool, inherits current model |
+| **codex** | "codexem", "codex" | `codex exec` via Bash |
+| **sonnet** | "sonetem", "sonnet" | Agent tool, model: sonnet |
+| **haiku** | "haiku" | Agent tool, model: haiku |
+| **opus** | "opusem", "opus" | Agent tool, model: opus |
+
+Default to **self** when no backend is mentioned.
 
 ## Modes
 
-| Mode | Trigger keywords | Reasoning | Timeout | Searches per angle |
-|------|-----------------|-----------|---------|-------------------|
-| **default** | "research", "zbadaj" | xhigh | 30 min | 6-10 |
-| **quick** | "quick", "szybki", "szybko", "fast", "krótki" | xhigh | 10 min | 3-5 |
+| Mode | Trigger keywords | Timeout (codex) | Searches per angle |
+|------|-----------------|-----------------|-------------------|
+| **default** | "research", "zbadaj" | 30 min | 6-10 |
+| **quick** | "quick", "szybki", "szybko", "fast", "krótki" | 10 min | 3-5 |
 
 Default unless the user explicitly asks for quick.
 
 ## Workflow
 
 1. Extract the research topic from the user's message
-2. Detect mode (default or quick) from trigger keywords
-3. Detect topic language (PL/EN/other) for the output language instruction
-4. Build the command (see template below), run in background
-5. Inform the user that research is running (mention mode)
-6. On completion, read the output file and present: brief summary first, then full report
-7. Clean up: `trash-put "$OUTPUT"`
+2. Detect backend from trigger keywords (self if none specified)
+3. Detect mode (default or quick)
+4. Detect topic language (PL/EN/other) for the output language instruction
+5. Inject variables into the appropriate research prompt: `{TOPIC}`, `{LANG}`, `{YEAR}`, `{PREV_YEAR}`
+6. Dispatch to backend (see below)
+7. Inform the user that research is running (mention backend + mode)
+8. On completion, present results: brief summary first, then full report
 
-## Command Template
+## Backend: Agent (self, sonnet, haiku, opus)
 
-The research prompt is multi-line with special characters. Always pass it via stdin heredoc to avoid escaping issues.
+Use the Agent tool:
+
+```
+name: "research"
+subagent_type: "general-purpose"
+model: <omit for self | "sonnet" | "haiku" | "opus">
+run_in_background: true
+prompt: <research prompt with {TOPIC}, {LANG}, {YEAR}, {PREV_YEAR} injected>
+```
+
+The agent has access to WebSearch and WebFetch tools for web research.
+
+After the agent completes, present its result to the user.
+
+## Backend: Codex
+
+Pass the prompt via stdin heredoc to avoid escaping issues.
 
 ### Default mode
 
@@ -43,7 +72,7 @@ codex exec \
   -c 'model_reasoning_effort="xhigh"' \
   -o "$OUTPUT" \
   - <<'RESEARCH_PROMPT'
-<INSERT DEFAULT RESEARCH PROMPT - see below>
+<INSERT RESEARCH PROMPT HERE>
 RESEARCH_PROMPT
 ```
 
@@ -62,22 +91,24 @@ codex exec \
   -c 'model_reasoning_effort="xhigh"' \
   -o "$OUTPUT" \
   - <<'RESEARCH_PROMPT'
-<INSERT QUICK RESEARCH PROMPT - see below>
+<INSERT QUICK RESEARCH PROMPT HERE>
 RESEARCH_PROMPT
 ```
 
 Run with Bash tool: `run_in_background: true`, `timeout: 600000`.
 
-### Notes
+### Codex notes
 
-The `-` argument tells codex to read the prompt from stdin. The `<<'RESEARCH_PROMPT'` heredoc passes it without shell expansion (single-quoted delimiter).
+- The `-` argument reads prompt from stdin. `<<'RESEARCH_PROMPT'` prevents shell expansion
+- After completion, read `$OUTPUT` with Read tool, present to user, then `trash-put "$OUTPUT"`
 
 ## Research Prompts
 
-Inject these variables before copying into the heredoc:
+Same prompts for all backends. Inject variables before use:
 - `{TOPIC}` - user's research topic
-- `{LANG}` - detected output language
-- `{YEAR}` - current year (e.g. "2026"), `{PREV_YEAR}` - previous year (e.g. "2025")
+- `{LANG}` - detected output language (e.g. "Polish", "English")
+- `{YEAR}` - current year (e.g. "2026")
+- `{PREV_YEAR}` - previous year (e.g. "2025")
 
 ### Default Research Prompt
 
@@ -86,7 +117,7 @@ You are a research analyst with live web search. Investigate the topic below tho
 
 ## Protocol
 
-1. **Scope**: Identify 3-5 distinct angles (current state, key players, technical approaches, tradeoffs, community opinion). If topic is broad (multiple categories/products), prioritize the 2-3 most actionable angles and go deep rather than covering everything shallowly.
+1. **Scope**: Identify 3-5 distinct angles (current state, key players, technical approaches, tradeoffs, community opinion). If topic is broad, prioritize the 2-3 most actionable angles and go deep rather than covering everything shallowly.
 
 2. **Search**: For each angle, run 6-10 web searches with varied queries. Depth over breadth.
    - Mix expert and layman terminology
@@ -97,7 +128,7 @@ You are a research analyst with live web search. Investigate the topic below tho
    - Search aggressively. More searches = better coverage. Do not stop at first results
    - When a search reveals a key player or benchmark, do follow-up searches on that specific name
 
-3. **Diversify perspectives**: Search from multiple angles for the same question. Look for industry reports (Intento, Gartner, etc.), academic benchmarks (WMT, FLORES, etc.), vendor comparisons, independent developer blogs, Reddit/HN discussions, and case studies. Different source types reveal different truths.
+3. **Diversify perspectives**: Search from multiple angles for the same question. Look for industry reports, academic benchmarks, vendor comparisons, independent developer blogs, Reddit/HN discussions, and case studies. Different source types reveal different truths.
 
 4. **Cross-reference**: Verify claims across multiple sources. Flag single-source claims as [single-source]. Note disagreements. Major claims require 2+ independent sources.
 
@@ -196,9 +227,10 @@ Topic: {TOPIC}
 
 ## Error Handling
 
-| Symptom | Action |
-|---------|--------|
-| Timeout (15 min) | Inform user, suggest narrowing the topic |
-| Non-zero exit + auth error in stderr | Show stderr, suggest `codex login` |
-| Output file missing or empty | Check `which codex`, show stderr to user |
-| `codex` not found | Tell user: `npm i -g @openai/codex` |
+| Symptom | Backend | Action |
+|---------|---------|--------|
+| Timeout | codex | Inform user, suggest narrowing the topic |
+| Auth error in stderr | codex | Show stderr, suggest `codex login` |
+| Output file missing/empty | codex | Check `which codex`, show stderr |
+| `codex` not found | codex | Tell user: `npm i -g @openai/codex` |
+| Agent returns error | agent | Show error, suggest retrying with different backend |

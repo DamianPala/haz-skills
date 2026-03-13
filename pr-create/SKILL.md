@@ -125,7 +125,7 @@ For **external** repos: frame Problem as impact (who's affected, how badly) not 
 
 #### Pattern C: Standard (default)
 
-For internal features, docs, tests, chore, CI, and anything that doesn't fit Pitch or Problem → Solution.
+For internal features, docs, tests, chore, CI, and anything that doesn't fit Pitch or Problem → Solution. Add sections from cross-pattern rules below when applicable.
 
 ```markdown
 ## Summary

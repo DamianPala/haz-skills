@@ -1,6 +1,6 @@
 ---
 name: pr-create
-description: "Create and update Pull Requests with structured descriptions from git diff and commit history. Supports GitHub (gh) and GitLab (glab). Triggers: 'create pr', 'create mr', 'write pr', 'make pr', 'open pr', 'update pr', 'zrob pr', 'otworz pr', 'zaktualizuj pr', 'pull request', 'merge request'. DO NOT TRIGGER for commit-only tasks or code review without PR creation."
+description: "Create and update Pull Requests with structured descriptions from git diff and commit history. Detects forks/upstream automatically, selects description pattern (pitch, problem/solution, standard) by change type. Supports GitHub (gh) and GitLab (glab). Triggers: 'create/open/write/make/update pr', 'submit to upstream', 'push for review', 'contribute back', 'create mr', 'zrob pr', 'otworz pr', 'zaktualizuj pr', 'wyslij do review', 'pull request', 'merge request'. Also trigger for fork-to-upstream submissions. DO NOT TRIGGER for commits, reviewing existing PRs, rebase, or cherry-pick."
 ---
 
 # PR Create

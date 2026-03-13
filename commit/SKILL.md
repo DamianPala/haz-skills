@@ -12,6 +12,7 @@ description: "Generate Conventional Commit messages from staged changes. Analyze
 - Respect repo's commitlint/husky rules and AGENTS.md commit mode settings
 - One logical change per commit
 - WHY not WHAT ("support new auth provider" not "add import X"). No generic messages, no hallucinated changes
+- Confirmation: find and use a user-prompting tool (AskUserQuestion, ask_user, prompt). Plain text only if none exists
 
 ## Modes
 
@@ -65,8 +66,6 @@ From `git diff --cached`, determine:
 
 **Single:** Show staged files (`git diff --cached --stat`), the message, ask "Commit? (y/edit/cancel)".
 **Batch:** Show full plan with files per commit, ask "Execute all? (y/edit/cancel)".
-
-Use the platform's confirmation tool if available (e.g., `AskUserQuestion`), otherwise present as text and wait for response.
 
 If **edit**: write to a temp file (e.g., `tempfile.gettempdir() + '/commit-message.md'`), tell user path, wait for confirmation, read back and validate CC format.
 

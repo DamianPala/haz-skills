@@ -17,6 +17,7 @@ description: "Create and update Pull Requests with structured descriptions from 
 - Focus on intent and impact, not obvious code changes
 - Specific test plans (`pytest -k test_auth`) not generic ("run the tests")
 - Trivial changes get trivial descriptions, not 3 paragraphs
+- Blocking prompt: find and use a user-prompting tool (AskUserQuestion, ask_user, prompt). Plain text only if none exists
 
 ## Platform detection
 
@@ -31,7 +32,7 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli"
 
 ## Workflow
 
-**Blocking prompt**: each user confirmation is one blocking prompt, one call, one question. Use the platform's dedicated tool (e.g., `AskUserQuestion` in Claude Code), otherwise ask and stop. Never batch multiple questions. Never embed a prompt inside longer output.
+**Blocking prompt**: one per call, one question. Never batch multiple questions. Never embed a prompt inside longer output.
 
 ### Step 1: Validate state
 

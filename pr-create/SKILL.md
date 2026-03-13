@@ -145,31 +145,28 @@ For internal features, docs, tests, chore, CI, and anything that doesn't fit Pit
 
 **Cross-pattern rules** (apply to all patterns). Incorporate any context the user provided in Step 1.
 - **Breaking changes**: add `## Breaking changes` when diff modifies public APIs, configs, CLI flags, or interfaces. What breaks + migration path
-- **Not changed**: add `## Not changed` for large PRs (>300 lines) where scope is ambiguous. 1-2 bullets clarifying what's out of scope
+- **Not changed**: add `## Not changed` for large PRs (>300 lines) where scope is ambiguous. 1-2 absolute statements of what's out of scope. No qualifiers ("except", "aside from", "other than"). If something changed even slightly, it belongs in Changes, not here
 - **Issue detection**: scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. `Fixes` if context says fixes/closes/resolves, otherwise `Refs`
 - **Scaling**: trivial (<30 lines) = Summary + Test plan only. Medium (30-300) = pattern-appropriate sections. Large (>300) = all sections. Over 1000 = suggest splitting
 
 ### Step 4: Verify
 
-**Grounding (mandatory):** Re-read `git diff --stat <effective_base>...HEAD`.
-- Every file/change mentioned in the description must be traceable to actual diff
-- Type must match diff content, not assumed intent
-- Issue refs only from branch name or commit messages. Never invent
-- If high-quality CC commit messages exist, lean on them for the summary
+Re-read `git diff --stat <effective_base>...HEAD` and answer every question below. Verify internally, do not output the checklist.
 
-**Pattern compliance (mandatory):** Re-read the goal of the pattern you chose (Pitch / Problem→Solution / Standard). Then verify:
-- Does Summary match the pattern's goal? Pitch: "why merge this?" Problem→Solution: "what broke and what's fixed?" Standard: "what and why?"
-- Summary uses only user/maintainer language. File names, function names, internal terms (IPC, pipeline, BYOK, middleware) → move to Changes
-- Changes uses reviewer language. Implementation detail belongs here, not in Summary
-- If any sentence in Summary wouldn't make sense to a non-contributor, rewrite or move it
+1. Every file in diff stat traceable to the description?
+2. Type matches diff content, not assumed intent?
+3. Issue refs only from branch name or commit messages (none invented)?
+4. Summary: zero file names, function names, acronyms, or internal jargon?
+5. Summary matches the pattern's core question? (Pitch: "why merge this?" / Problem→Solution: "what broke and what's fixed?" / Standard: "what and why?")
+6. Changes has the implementation detail that is NOT in Summary?
+7. Not changed (if present): absolute claims only, no "except/aside from"?
+8. No AI trailers (Co-Authored-By, etc.)?
+9. No filler phrases ("comprehensive", "robust", "improves the codebase")?
+10. No restating what the diff already shows ("Added import X to file Y")?
+11. For **external** PRs: does Summary answer "why should a maintainer merge this?"?
+12. For **fix/refactor** PRs: is Problem understandable without reading the code?
 
-**Anti-patterns:**
-- No AI attribution trailers (Co-Authored-By, etc.)
-- No unsupported filler phrases ("This PR improves the codebase", "comprehensive changes", "robust handling"). Specific claims backed by the diff are fine, even in persuasive tone
-- No restating what the diff already shows ("Added import X to file Y")
-- No promoting workarounds or hacks as features in Summary
-- For **external** PRs: does Summary answer "why should a maintainer merge this?"
-- For **fix/refactor** PRs: is Problem understandable without reading the code?
+If any answer is no, fix the description before proceeding. If high-quality CC commit messages exist, lean on them for the summary.
 
 ### Step 5: Present for review
 

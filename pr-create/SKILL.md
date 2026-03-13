@@ -18,8 +18,6 @@ description: "Create and update Pull Requests with structured descriptions from 
 - Specific test plans (`pytest -k test_auth`) not generic ("run the tests")
 - Trivial changes get trivial descriptions, not 3 paragraphs
 
-Create or update Pull/Merge Requests with descriptions generated from diff and commit history.
-
 ## Platform detection
 
 Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli": "gh"|"glab", "host": "...", "method": "..."}`. Abort if detection fails (neither CLI authenticated).
@@ -30,8 +28,6 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli"
 |------|---------|----------|
 | **create** (default) | "create", "open", "write", "make", "zrob", "otworz" | New PR, draft by default |
 | **update** | "update", "refresh", "zaktualizuj", "popraw" | Edit existing PR description |
-
-Default to **create** as **draft** when no explicit mode is given.
 
 ## Workflow
 
@@ -90,24 +86,24 @@ Goal: convince the maintainer this PR is worth merging. Lead with value, not imp
 ```markdown
 ## Summary
 
-<Value for the project's users: what capability this adds, why it matters, proof of quality (tests, benchmarks, real-world usage). No file names here.>
+<Value for users: what this adds, why it matters, proof of quality. No file names.>
 
 ## Changes
 
-<Reviewer-facing: files modified, architectural approach, design decisions, alternatives considered.>
+<Reviewer-facing: files, architecture, design decisions, alternatives.>
 
 ## Test plan
 
 <Concrete commands and manual verification steps.>
 ```
 
-Draft selling points yourself from the diff (new capabilities, performance gains, test coverage). Incorporate any context the user provided in Step 1.
+Draft selling points yourself from the diff (new capabilities, performance gains, test coverage).
 
 #### Pattern B: Problem → Solution (fix/refactor/perf)
 
 Goal: show you understand the problem and the fix is deliberate, not accidental.
 
-For **external** repos: frame Problem as impact (who's affected, how badly) not just technical detail. The Problem section is your pitch for why this deserves a merge. Incorporate any context the user provided in Step 1.
+For **external** repos: frame Problem as impact (who's affected, how badly) not just technical detail. The Problem section is your pitch for why this deserves a merge.
 
 ```markdown
 ## Summary
@@ -116,11 +112,11 @@ For **external** repos: frame Problem as impact (who's affected, how badly) not 
 
 ## Problem
 
-<What went wrong, why, who's affected. Reproduction steps or context. Link to issues if found. For external: emphasize user-facing impact.>
+<What went wrong, who's affected, reproduction steps. For external: emphasize user-facing impact.>
 
 ## Solution
 
-<Approach taken, alternatives considered, before/after if concise. Why this approach over others.>
+<Approach, alternatives considered, why this over others.>
 
 ## Test plan
 
@@ -134,36 +130,24 @@ For internal features, docs, tests, chore, CI, and anything that doesn't fit Pit
 ```markdown
 ## Summary
 
-<1-3 bullet points: WHAT changed and WHY. Focus on the why, the diff shows the what.>
+<1-3 bullets: WHAT changed and WHY. Focus on the why, the diff shows the what.>
 
 ## Changes
 
-<Only for non-trivial PRs (>3 files or >100 lines). Brief description of the approach, design decisions, or alternatives considered. Skip for simple changes.>
-
-## Breaking changes
-
-<Only when PR modifies public APIs, configs, CLI flags, or interfaces. What breaks and how to migrate. Skip if nothing breaks.>
-
-## Not changed
-
-<Only for large PRs (>300 lines) where scope is ambiguous. 1-2 bullets clarifying what is explicitly out of scope. Skip for small/medium changes.>
-
-## Issues
-
-<Auto-detected from branch name and commit messages. Format: "Fixes #123", "Refs #456", "Closes PROJ-789". Omit section if none found.>
+<Non-trivial PRs only (>3 files or >100 lines). Approach, design decisions, alternatives. Skip for simple changes.>
 
 ## Test plan
 
-<Checklist with checkboxes. Concrete commands, manual steps, or "Covered by existing tests". Always include.>
+<Checkboxes. Concrete commands, manual steps, or "Covered by existing tests".>
 - [ ] `make test` passes
 - [ ] Manual: verify X works as expected
 ```
 
-**Breaking changes** (all patterns): add a `## Breaking changes` section when the diff modifies public APIs, configs, CLI flags, or interfaces. Describe what breaks and how to migrate.
-
-**Issue detection** (all patterns): scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. Use `Fixes` if context says fixes/closes/resolves, otherwise `Refs`. Add Issues section to any pattern when refs are found.
-
-**Scaling** (all patterns): trivial (<30 lines) = Summary + Test plan only. Medium (30-300 lines) = pattern-appropriate sections. Large (>300 lines) = all sections. Over 1000 lines = suggest splitting.
+**Cross-pattern rules** (apply to all patterns). Incorporate any context the user provided in Step 1.
+- **Breaking changes**: add `## Breaking changes` when diff modifies public APIs, configs, CLI flags, or interfaces. What breaks + migration path
+- **Not changed**: add `## Not changed` for large PRs (>300 lines) where scope is ambiguous. 1-2 bullets clarifying what's out of scope
+- **Issue detection**: scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. `Fixes` if context says fixes/closes/resolves, otherwise `Refs`
+- **Scaling**: trivial (<30 lines) = Summary + Test plan only. Medium (30-300) = pattern-appropriate sections. Large (>300) = all sections. Over 1000 = suggest splitting
 
 ### Step 4: Verify
 

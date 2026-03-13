@@ -31,7 +31,7 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli"
 
 ## Workflow
 
-**Blocking prompt**: all user confirmations use a blocking prompt. Use the platform's dedicated tool (e.g., `AskUserQuestion` in Claude Code), otherwise ask and stop. Never embed confirmations inside longer messages.
+**Blocking prompt**: each user confirmation is one blocking prompt, one call, one question. Use the platform's dedicated tool (e.g., `AskUserQuestion` in Claude Code), otherwise ask and stop. Never batch multiple questions. Never embed a prompt inside longer output.
 
 ### Step 1: Validate state
 

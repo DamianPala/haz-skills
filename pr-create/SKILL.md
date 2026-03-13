@@ -165,6 +165,7 @@ Re-read `git diff --stat <effective_base>...HEAD` and answer every question belo
 10. No restating what the diff already shows ("Added import X to file Y")?
 11. For **external** PRs: does Summary answer "why should a maintainer merge this?"?
 12. For **fix/refactor** PRs: is Problem understandable without reading the code?
+13. Changes section present only if >3 files or >100 lines?
 
 If any answer is no, fix the description before proceeding. If high-quality CC commit messages exist, lean on them for the summary.
 

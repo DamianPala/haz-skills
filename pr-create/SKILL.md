@@ -13,6 +13,7 @@ description: "Create and update Pull Requests with structured descriptions from 
 - No AI attribution trailers (Co-Authored-By, etc.)
 - Use ALL commits since base, not just the latest
 - PR template over default structure when template exists
+- Summary = user/maintainer perspective (no file names, no implementation). Changes = reviewer perspective (files, architecture, details)
 - Focus on intent and impact, not obvious code changes
 - Specific test plans (`pytest -k test_auth`) not generic ("run the tests")
 - Trivial changes get trivial descriptions, not 3 paragraphs
@@ -34,20 +35,31 @@ Default to **create** as **draft** when no explicit mode is given.
 
 ## Workflow
 
+**Blocking prompt**: all user confirmations use a blocking prompt. Use the platform's dedicated tool (e.g., `AskUserQuestion` in Claude Code), otherwise ask and stop. Never embed confirmations inside longer messages.
+
 ### Step 1: Validate state
 
 - Current branch from `git branch --show-current`. Abort if on main/master/develop
 - Base branch: check `branch.<name>.merge-base` git config, then remote default branch (`gh repo view` / `glab repo view` / `git remote show origin`), fallback to `main`
-- Count commits ahead: `git rev-list --count <base>..HEAD`. If 0, abort: "No commits ahead of <base>"
-- **Update mode**: find existing PR (`gh pr list --head <branch>` / `glab mr list --source-branch <branch>`). If none, offer to create instead
+- Fork detection: `git remote get-url upstream 2>/dev/null`
+  - If upstream exists: `git fetch upstream <base> --quiet` (if fetch fails, skip fork detection)
+  - Then `git rev-list --count <base>..upstream/<base>`. If upstream ahead: effective_base = `upstream/<base>`
+  - Otherwise (no upstream, fetch failed, or upstream even/behind): effective_base = `<base>`
+- **Blocking prompt** (target + context):
+  - If fork detected (upstream ahead): "Fork detected: <base> is N commits behind upstream/<base>. Looks like an external contribution to [upstream-owner/repo]. Correct? Any context to highlight for the maintainer? (external / internal)"
+  - Otherwise: "Internal PR or external contribution? If external: any context to highlight? (impact, affected users, why it matters)"
+  - User says internal → effective_base = local `<base>`, target = internal
+  - User says external → keep effective_base (upstream if available), target = external
+- Count commits ahead: `git rev-list --count <effective_base>..HEAD`. If 0, abort: "No commits ahead of <effective_base>"
+- **Update mode**: find existing PR (`gh pr list --head <branch>` / `glab mr list --source-branch <branch>`). If none found: **Blocking prompt**: "No existing PR for this branch. Create a new one? (y/cancel)"
 
 ### Step 2: Gather context
 
-Run in parallel:
+Run in parallel (using effective_base from Step 1):
 
-- `git diff <base>...HEAD` — full diff
-- `git log --format='### %s%n%n%b' <base>..HEAD` — commits with bodies
-- `git diff --stat <base>...HEAD` — changed files summary
+- `git diff <effective_base>...HEAD` — full diff
+- `git log --format='### %s%n%n%b' <effective_base>..HEAD` — commits with bodies
+- `git diff --stat <effective_base>...HEAD` — changed files summary
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`, `.github/pull_request_template.md`, `docs/pull_request_template.md`
 - `git status --porcelain` — uncommitted changes
 
@@ -63,7 +75,61 @@ If uncommitted changes exist, warn: "You have uncommitted changes that won't be 
 - For yes/no fields ("Security impact?", "Breaking change?"), answer from diff
 - Keep the template's structure intact
 
-Otherwise, use this structure:
+Otherwise, select a description pattern:
+
+| Type | Target | Pattern |
+|------|--------|---------|
+| feat | external | **Pitch** |
+| fix, refactor, perf | any | **Problem → Solution** |
+| everything else | any | **Standard** |
+
+#### Pattern A: Pitch (feat + external)
+
+Goal: convince the maintainer this PR is worth merging. Lead with value, not implementation.
+
+```markdown
+## Summary
+
+<Value for the project's users: what capability this adds, why it matters, proof of quality (tests, benchmarks, real-world usage). No file names here.>
+
+## Changes
+
+<Reviewer-facing: files modified, architectural approach, design decisions, alternatives considered.>
+
+## Test plan
+
+<Concrete commands and manual verification steps.>
+```
+
+Draft selling points yourself from the diff (new capabilities, performance gains, test coverage). Incorporate any context the user provided in Step 1.
+
+#### Pattern B: Problem → Solution (fix/refactor/perf)
+
+Goal: show you understand the problem and the fix is deliberate, not accidental.
+
+For **external** repos: frame Problem as impact (who's affected, how badly) not just technical detail. The Problem section is your pitch for why this deserves a merge. Incorporate any context the user provided in Step 1.
+
+```markdown
+## Summary
+
+<1-3 bullets: what was broken/suboptimal and what's fixed now.>
+
+## Problem
+
+<What went wrong, why, who's affected. Reproduction steps or context. Link to issues if found. For external: emphasize user-facing impact.>
+
+## Solution
+
+<Approach taken, alternatives considered, before/after if concise. Why this approach over others.>
+
+## Test plan
+
+<Steps to verify the fix works and the original problem is gone.>
+```
+
+#### Pattern C: Standard (default)
+
+For internal features, docs, tests, chore, CI, and anything that doesn't fit Pitch or Problem → Solution.
 
 ```markdown
 ## Summary
@@ -93,19 +159,33 @@ Otherwise, use this structure:
 - [ ] Manual: verify X works as expected
 ```
 
-**Issue detection**: scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. Use `Fixes` if context says fixes/closes/resolves, otherwise `Refs`.
+**Breaking changes** (all patterns): add a `## Breaking changes` section when the diff modifies public APIs, configs, CLI flags, or interfaces. Describe what breaks and how to migrate.
 
-**Scaling**: trivial (<30 lines): Summary + Test plan only. Medium (30-300 lines): add Changes. Large (>300 lines): all sections. Over 1000 lines: suggest splitting into smaller PRs.
+**Issue detection** (all patterns): scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. Use `Fixes` if context says fixes/closes/resolves, otherwise `Refs`. Add Issues section to any pattern when refs are found.
+
+**Scaling** (all patterns): trivial (<30 lines) = Summary + Test plan only. Medium (30-300 lines) = pattern-appropriate sections. Large (>300 lines) = all sections. Over 1000 lines = suggest splitting.
 
 ### Step 4: Verify
 
-**Grounding (mandatory):** Re-read `git diff --stat <base>...HEAD`.
+**Grounding (mandatory):** Re-read `git diff --stat <effective_base>...HEAD`.
 - Every file/change mentioned in the description must be traceable to actual diff
 - Type must match diff content, not assumed intent
 - Issue refs only from branch name or commit messages. Never invent
 - If high-quality CC commit messages exist, lean on them for the summary
 
-**Sanity:** No AI attribution trailers (Co-Authored-By, etc.) in the body. No filler phrases ("This PR improves the codebase", "comprehensive changes"). No restating obvious code changes ("Added import X to file Y").
+**Pattern compliance (mandatory):** Re-read the goal of the pattern you chose (Pitch / Problem→Solution / Standard). Then verify:
+- Does Summary match the pattern's goal? Pitch: "why merge this?" Problem→Solution: "what broke and what's fixed?" Standard: "what and why?"
+- Summary uses only user/maintainer language. File names, function names, internal terms (IPC, pipeline, BYOK, middleware) → move to Changes
+- Changes uses reviewer language. Implementation detail belongs here, not in Summary
+- If any sentence in Summary wouldn't make sense to a non-contributor, rewrite or move it
+
+**Anti-patterns:**
+- No AI attribution trailers (Co-Authored-By, etc.)
+- No unsupported filler phrases ("This PR improves the codebase", "comprehensive changes", "robust handling"). Specific claims backed by the diff are fine, even in persuasive tone
+- No restating what the diff already shows ("Added import X to file Y")
+- No promoting workarounds or hacks as features in Summary
+- For **external** PRs: does Summary answer "why should a maintainer merge this?"
+- For **fix/refactor** PRs: is Problem understandable without reading the code?
 
 ### Step 5: Present for review
 
@@ -113,7 +193,8 @@ Show title, base/branch info, and body:
 
 ```
 Title: <type>(<scope>): <description>
-Base: <base> ← <branch> (<N> commits)
+Base: <effective_base> <- <branch> (<N> commits)
+Target: <internal|external>
 
 Body:
 ## Summary
@@ -124,11 +205,15 @@ Body:
 - [ ] Manual: <concrete verification step>
 ```
 
-If repo has a test runner (`Makefile`, `package.json` test script, `pytest.ini`, `Cargo.toml`), offer: "Run tests before creating?" Don't enforce.
+If repo has a test runner (`Makefile`, `package.json` test script, `pytest.ini`, `Cargo.toml`):
+**Blocking prompt**: "Run tests before creating? (y/n)"
 
-Ask "Create PR? (y/edit/cancel)" — use the platform's confirmation tool if available (e.g., `AskUserQuestion`), otherwise present as text and wait for response.
+**Large PRs** (>300 lines diff): write body to a temp file (`tempfile.gettempdir() + '/pr-description.md'`). Show title, base/branch, target, and file path.
+**Blocking prompt**: "Review and edit at [path]. (ready/cancel)"
 
-If **edit**: write to a temp file (e.g., `tempfile.gettempdir() + '/pr-description.md'`), tell user path, wait for confirmation, read back.
+**Small/medium PRs**: show body inline.
+**Blocking prompt**: "Create PR? (y/edit/cancel)"
+If **edit**: write to temp file, tell user path, wait for confirmation, read back.
 
 ### Step 6: Create and confirm
 
@@ -141,4 +226,4 @@ Create/update with CLI:
 
 Output: PR/MR URL, status (draft/ready), base branch, commit count.
 
-Never force-push. Never auto-merge. Draft by default. No AI trailers.
+Never force-push. Never auto-merge. Draft by default. No AI trailers. Summary speaks user language, not code.

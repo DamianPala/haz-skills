@@ -61,6 +61,27 @@ add_completion_command(cli, "myapp")
 
 Usage: `myapp generate-completion --install` (auto-installs) or `myapp generate-completion [bash|zsh|fish]` (stdout).
 
+## bump-my-version (mini-package / package)
+
+Add to `pyproject.toml`. Note: the `search`/`replace` pattern includes surrounding context to avoid matching `current_version` in the bumpversion config itself.
+
+```toml
+[tool.bumpversion]
+current_version = "0.1.0"
+commit = true
+tag = true
+tag_name = "v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'name = "<app>"\nversion = "{current_version}"'
+replace = 'name = "<app>"\nversion = "{new_version}"'
+```
+
+Replace `<app>` with the actual package name from `[project]`.
+
+Usage: `uvx bump-my-version bump patch` (or `minor`/`major`).
+
 ## Ruff defaults
 
 ```toml

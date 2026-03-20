@@ -1,5 +1,5 @@
 ---
-name: python-app-uv
+name: python-app
 description: General-purpose Python apps (CLI tools, services, libraries, scripts, automation) for Ubuntu >= 22.04 and Python >= 3.12. Uses uv for scaffolding, project management, builds, and dependency resolution. Use for templates, project structure, implementation, refactors, or best-practice setup.
 ---
 
@@ -65,7 +65,8 @@ Ask the minimum set of questions needed to start. Skip anything already specifie
 ## Implementation defaults
 
 - Prefer minimal dependencies.
-- Use `argparse` for CLI, `logging` for logs, `pathlib` for paths.
+- CLI: use `argparse` for script layout, `click` for mini-package/package layouts.
+- Use `logging` for logs, `pathlib` for paths.
 - Keep modules small and focused.
 - Add `--help` and clear error messages.
 - Return non-zero exit codes on failure for CLI apps.
@@ -109,8 +110,60 @@ package:
 - Optional modules as needed (e.g., `config.py`, `service.py`).
 - `tests/` (only if requested)
 - `README.md`
+- Use `click` for CLI entrypoints.
+- Add Click as dependency: `uv add click`.
+- Add dev tools via dependency groups: `uv add --group dev ruff mypy pytest pytest-cov`.
 - Configure `pyproject.toml` according to `references/pyproject-snippets.md` and apply only the relevant blocks.
 - Run the app and tests via `uv run`.
+
+## Versioning
+
+Every layout supports semver versioning with `bump-my-version` (run via `uvx`, zero install).
+
+### By layout
+
+**script:**
+- `__version__ = "0.1.0"` at top of the script file
+- `parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")`
+- `.bumpversion.toml` targets the script file directly
+- No `pyproject.toml` needed
+
+**mini-package / package:**
+- Single source of truth: `version = "0.1.0"` in `pyproject.toml` under `[project]`. Never hardcode version strings in Python files
+- Read in code: `from importlib.metadata import version; __version__ = version("<app>")`
+- CLI flag: `@click.version_option()` (Click reads package metadata automatically)
+- bump-my-version config goes into `pyproject.toml` under `[tool.bumpversion]`
+
+### bump-my-version config
+
+For script layout (`.bumpversion.toml`):
+
+```toml
+[tool.bumpversion]
+current_version = "0.1.0"
+commit = true
+tag = true
+tag_name = "v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "app.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
+```
+
+For mini-package/package, see `references/pyproject-snippets.md` for the config snippet.
+
+### Release workflow
+
+```bash
+uvx bump-my-version bump patch    # 0.1.0 → 0.1.1
+uvx bump-my-version bump minor    # 0.1.0 → 0.2.0
+uvx bump-my-version bump major    # 0.1.0 → 1.0.0
+```
+
+Each command updates the version string, commits, and creates a git tag `vX.Y.Z`.
+
+Dry run: `uvx bump-my-version bump minor --dry-run --verbose`
 
 ## Config pattern
 
@@ -185,6 +238,8 @@ Notes:
 - For Click CLIs, confirm `_completion.py` is included and `add_completion_command()` is called.
 - For script CLIs using `argparse` + argcomplete, include user-facing instructions for installing and enabling system-wide completion (e.g., `python -m pip install argcomplete --break-system-packages` and `sudo activate-global-python-argcomplete`).
 - Commit `uv.lock` to version control for reproducible builds.
+- `--version` flag works and prints the current version.
+- `.bumpversion.toml` present (script layout) or `[tool.bumpversion]` in `pyproject.toml` (package layouts).
 
 ## Pre-finish checklist (when building a project)
 
@@ -194,6 +249,8 @@ Notes:
 - Dependencies listed in `[project.dependencies]`
 - Dev/test tools in `[dependency-groups]` (PEP 735), not in `[project.optional-dependencies]`
 - CLI entrypoint set in `[project.scripts]` if a CLI is provided
+- Version set: `__version__` (script) or `version` in pyproject.toml (package)
+- bump-my-version config present and targeting the correct file
 - Avoid deprecated features or compatibility shims (e.g., skip `from __future__ import annotations`)
 - If tests are added/requested: pytest snippet in `pyproject.toml` and pytest in a dependency group (from `references/pyproject-snippets.md`)
 - `README.md` present with sections from README structure template

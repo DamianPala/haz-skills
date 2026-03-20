@@ -1,1 +1,13 @@
 *-workspace/
+
+# Development plans and research (per-skill, not committed)
+**/references/plan*.md
+**/references/research-*.md
+
+# Test outputs
+**/test-outputs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

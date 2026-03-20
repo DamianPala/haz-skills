@@ -54,17 +54,46 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli"
 
 Run in parallel (using effective_base from Step 1):
 
-- `git diff <effective_base>...HEAD` — full diff
-- `git log --format='### %s%n%n%b' <effective_base>..HEAD` — commits with bodies
-- `git diff --stat <effective_base>...HEAD` — changed files summary
+- `git diff --stat <effective_base>...HEAD` — changed files summary (file count, total lines)
+- Commit count: already known from Step 1
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`, `.github/pull_request_template.md`, `docs/pull_request_template.md`
 - `git status --porcelain` — uncommitted changes
 
 If uncommitted changes exist, warn: "You have uncommitted changes that won't be included in the PR."
 
+**Complexity check** (from diff stat and commit count):
+
+| Condition | Data source |
+|-----------|-------------|
+| >5 commits OR >500 changed lines | **change-summary** (sub-skill) |
+| ≤5 commits AND ≤500 lines | **raw diff** (inline analysis) |
+
+**change-summary path:** invoke via Skill tool with sub-skill mode:
+
+```
+Skill: 'change-summary'
+Args: "Analyze changes between <effective_base> and HEAD. --platform <cli> --host <host>"
+```
+
+Pass `--platform` and `--host` from platform detection when available. Returns structured changes with types, descriptions (user-facing), details (technical), files, confidence, breaking flags, and migration info.
+
+**Raw diff path** (below threshold or change-summary unavailable): gather directly:
+
+- `git diff <effective_base>...HEAD` — full diff
+- `git log --format='### %s%n%n%b' <effective_base>..HEAD` — commits with bodies
+
 ### Step 3: Analyze and generate
 
-**Title**: CC format, ≤70 chars. Type from diff content: `feat` (new files/exports/routes), `fix` (incorrect behavior), `refactor` (structural, no behavior change), `docs` (only .md/docs), `test` (only tests), `chore`/`ci`/`build` (config/CI/build), `perf`, `style`. Scope from primary directory/module, omit if broad.
+**Data source:** when change-summary was used (Step 2), its structured output is the primary input:
+- `description` fields → Summary sections (user perspective, no jargon)
+- `detail` + `files` fields → Changes sections (reviewer perspective, architecture)
+- `type` distribution → PR type (dominant: most impactful, not most frequent)
+- `breaking` + `migration` → Breaking changes section
+- `confidence` → weight high-confidence changes in summary, mention low-confidence as "likely"
+
+When raw diff was used, analyze directly from diff and commit messages as before.
+
+**Title**: CC format, ≤70 chars. Type from change-summary's dominant type when available, otherwise from diff content: `feat` (new files/exports/routes), `fix` (incorrect behavior), `refactor` (structural, no behavior change), `docs` (only .md/docs), `test` (only tests), `chore`/`ci`/`build` (config/CI/build), `perf`, `style`. Scope from primary directory/module, omit if broad.
 
 **Body**: If repo has a PR template (from Step 2), fill it in:
 - Check applicable checkboxes (`- [x]`), leave others unchecked
@@ -145,7 +174,7 @@ For internal features, docs, tests, chore, CI, and anything that doesn't fit Pit
 ```
 
 **Cross-pattern rules** (apply to all patterns). Incorporate any context the user provided in Step 1.
-- **Breaking changes**: add `## Breaking changes` when diff modifies public APIs, configs, CLI flags, or interfaces. What breaks + migration path
+- **Breaking changes**: add `## Breaking changes` when change-summary flags `breaking: true` or when diff modifies public APIs, configs, CLI flags, or interfaces. Use change-summary's `migration` field when available. What breaks + migration path
 - **Not changed**: add `## Not changed` for large PRs (>300 lines) where scope is ambiguous. 1-2 absolute statements of what's out of scope. No qualifiers ("except", "aside from", "other than"). If something changed even slightly, it belongs in Changes, not here
 - **Issue detection**: scan branch name and commit messages for `#\d+` or `[A-Z]+-\d+`. `Fixes` if context says fixes/closes/resolves, otherwise `Refs`
 - **Scaling**: trivial (<30 lines) = Summary + Test plan only. Medium (30-300) = pattern-appropriate sections. Large (>300) = all sections. Over 1000 = suggest splitting
@@ -167,6 +196,7 @@ Re-read `git diff --stat <effective_base>...HEAD` and answer every question belo
 11. For **external** PRs: does Summary answer "why should a maintainer merge this?"?
 12. For **fix/refactor** PRs: is Problem understandable without reading the code?
 13. Changes section present only if >3 files or >100 lines?
+14. Any section with a single bullet? Use plain text instead of a list.
 
 If any answer is no, fix the description before proceeding. If high-quality CC commit messages exist, lean on them for the summary.
 
@@ -191,12 +221,14 @@ Body:
 If repo has a test runner (`Makefile`, `package.json` test script, `pytest.ini`, `Cargo.toml`):
 **Blocking prompt**: "Run tests before creating? (y/n)"
 
-**Large PRs** (>300 lines diff): write body to a temp file (`tempfile.gettempdir() + '/pr-description.md'`). Show title, base/branch, target, and file path.
-**Blocking prompt**: "Review and edit at [path]. (ready/cancel)"
+**Large PRs** (>300 lines diff): write body to a temp file (`tempfile.gettempdir() + '/pr-description.md'`), open for the user, show title, base/branch, target.
+**Blocking prompt**: "Editing at [path]. (ready/cancel)"
 
 **Small/medium PRs**: show body inline.
 **Blocking prompt**: "Create PR? (y/edit/cancel)"
-If **edit**: write to temp file, tell user path, wait for confirmation, read back.
+If **edit**: write to temp file, open for the user, wait for confirmation, read back.
+
+To open a temp file for editing: `xdg-open` (Linux), `open` (macOS), `start` (Windows).
 
 ### Step 6: Create and confirm
 

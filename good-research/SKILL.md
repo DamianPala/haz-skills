@@ -1,6 +1,6 @@
 ---
 name: good-research
-description: "Run web research with live web search via multiple backends. Two modes: default (thorough) and quick (focused). Supports: current model, Codex, Sonnet, Haiku, Opus. Triggers: $good-research, 'research [topic]', 'zbadaj [temat]', 'zrób research [temat]', 'odpal research [temat]', 'research codexem [temat]', 'codex research [topic]', 'zbadaj codexem [temat]', 'research sonetem [temat]', 'sonnet research [topic]', 'research opusem [temat]', 'opus research [topic]', 'research haiku [temat]', 'quick research [topic]', 'szybki research [temat]', 'szybko zbadaj [temat]'. DO NOT TRIGGER for simple questions without research intent."
+description: "Run web research with live web search via multiple backends. Two modes: default (thorough) and quick (focused). Triggers: 'research [topic]', 'zbadaj [temat]', 'zrób research [temat]', 'odpal research [temat]', 'research codexem [temat]', 'codex research [topic]', 'zbadaj codexem [temat]', 'research sonetem [temat]', 'sonnet research [topic]', 'research opusem [temat]', 'opus research [topic]', 'research haiku [temat]', 'quick research [topic]', 'szybki research [temat]', 'szybko zbadaj [temat]'. DO NOT TRIGGER for simple questions without research intent."
 ---
 
 # Research
@@ -31,13 +31,51 @@ Default unless the user explicitly asks for quick.
 ## Workflow
 
 1. Extract the research topic from the user's message
-2. Detect backend from trigger keywords (self if none specified)
-3. Detect mode (default or quick)
-4. Detect topic language (PL/EN/other) for the output language instruction
-5. Inject variables into the appropriate research prompt: `{TOPIC}`, `{LANG}`, `{YEAR}`, `{PREV_YEAR}`
-6. Dispatch to backend (see below)
-7. Inform the user that research is running (mention backend + mode)
-8. On completion, present results: brief summary first, then full report
+2. **Scope Check** — decide whether to clarify before researching
+
+   ### When to skip (just go)
+   - Topic has explicit research questions ("compare X vs Y", "what are tradeoffs of")
+   - Topic includes constraints (timeframe, audience, scope, exclusions)
+   - Conversation context already provides scope (prior messages narrow the topic)
+   - User flags: "skip questions" / "nie pytaj", "no clarification" / "bez dopytywania"
+   - **Quick mode requested** — always skip when user triggers quick/szybki/fast. Speed over precision, no quiz
+
+   ### When to ask
+   - Topic is short/vague (1-5 words, e.g. "AI agents") AND no conversation context narrows it
+   - Multiple plausible research directions exist that would produce very different reports
+   - User flags: "let me clarify" / "doprecyzuję", "help me scope" / "pomóż sformułować"
+
+   **Rule**: skip by default. Only ask when the topic is genuinely ambiguous and you cannot resolve it from conversation context or a quick discovery read.
+
+   ### How to ask
+
+   **Scale questions to vagueness.** Assess how underspecified the topic is and adjust:
+
+   | Vagueness | Example | Questions |
+   |-----------|---------|-----------|
+   | Slightly vague (direction clear, details missing) | "research new Claude models" | 1 question |
+   | Moderately vague (area known, direction unclear) | "research remote work tools" | 2-3 questions |
+   | Very vague (just a domain) | "research AI" | 3-5 questions |
+
+   Rules:
+   - Open-ended questions. Let the user describe the direction in their own words
+   - Focus on: intent (what do you want to learn?), goal (what will you do with this?), scope (what's in/out?)
+   - Keep it concise — the user asked for research, not a quiz
+   - Do NOT ask about things you can infer from conversation context, user profile, or a quick discovery read
+
+   ### Verify before proceeding
+
+   After user responds, check: do I now have enough to produce a focused report?
+   - **Yes** → restate scope in 1 sentence, proceed to research
+   - **No** → ask 1-2 follow-up questions on the remaining gaps. Max 1 follow-up round (do not loop)
+
+3. Detect backend from trigger keywords (self if none specified)
+4. Detect mode (default or quick)
+5. Detect topic language (PL/EN/other) for the output language instruction
+6. Inject variables into the appropriate research prompt: `{TOPIC}`, `{LANG}`, `{YEAR}`, `{PREV_YEAR}`
+7. Dispatch to backend (see below)
+8. Inform the user that research is running (mention backend + mode)
+9. On completion, present results: brief summary first, then full report
 
 ## Backend: Agent (self, sonnet, haiku, opus)
 
@@ -234,3 +272,4 @@ Topic: {TOPIC}
 | Output file missing/empty | codex | Check `which codex`, show stderr |
 | `codex` not found | codex | Tell user: `npm i -g @openai/codex` |
 | Agent returns error | agent | Show error, suggest retrying with different backend |
+| Agent timeout (no output) | agent | Inform user, suggest quick mode or narrower topic |

@@ -64,8 +64,8 @@ From `git diff --cached`, determine:
 
 **Autonomous mode:** Skip to Step 5.
 
-**Single:** Show staged files (`git diff --cached --stat`), the message, ask "Commit? (y/edit/cancel)".
-**Batch:** Show full plan with files per commit, ask "Execute all? (y/edit/cancel)".
+**Single:** First, output staged files and the full commit message as readable text (markdown code block for the message). Then ask "Commit?" with the confirmation tool (yes/edit/cancel). Do NOT embed the commit message inside the confirmation tool options — print it as text first so the user can read it.
+**Batch:** First, output the full plan with files per commit and each commit message as readable text. Then ask "Execute all?" with the confirmation tool (yes/edit/cancel).
 
 If **edit**: write to a temp file (e.g., `tempfile.gettempdir() + '/commit-message.md'`), tell user path, wait for confirmation, read back and validate CC format.
 
@@ -78,3 +78,5 @@ If pre-commit hooks modify files, re-stage (`git add -u`) and retry. Hooks fail 
 Output: commit hash (short), subject, then `git diff --stat HEAD~1` (file list with insertions/deletions). Do NOT push.
 
 Never `--no-verify`. Never force push. Never commit secrets or AI trailers.
+
+Commit body follows git convention: explain the motivation and impact of the change for someone reading git log. Skip it when the subject already tells the full story.

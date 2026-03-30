@@ -80,3 +80,10 @@ Output: commit hash (short), subject, then `git diff --stat HEAD~1` (file list w
 Never `--no-verify`. Never force push. Never commit secrets or AI trailers.
 
 Commit body follows git convention: explain the motivation and impact of the change for someone reading git log. Skip it when the subject already tells the full story.
+
+## Constraints
+
+- **Show before asking.** Always print staged files and the full commit message as readable text BEFORE showing the confirmation prompt. Never embed the message inside tool options.
+- **Ground every claim in the diff.** Re-read `git diff --cached` before finalizing. Every change in the message must map to actual diff lines.
+- **No destructive operations.** Never `--no-verify`, never force push, never amend pushed commits, never `git add -A` or `git add .`.
+- **No secrets, no AI trailers.** Never commit tokens/credentials. Never add Co-Authored-By or AI attribution.

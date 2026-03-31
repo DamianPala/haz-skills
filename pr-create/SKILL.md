@@ -40,10 +40,13 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli"
 - Base branch: check `branch.<name>.merge-base` git config, then remote default branch (`gh repo view` / `glab repo view` / `git remote show origin`), fallback to `main`
 - Fork detection: `git remote get-url upstream 2>/dev/null`
   - If upstream exists: `git fetch upstream <base> --quiet` (if fetch fails, skip fork detection)
-  - Then `git rev-list --count <base>..upstream/<base>`. If upstream ahead: effective_base = `upstream/<base>`
+  - Check if branch is already based on upstream: `git merge-base --is-ancestor upstream/<base> HEAD` (exit 0 = branch includes upstream/<base>)
+  - If branch based on upstream: effective_base = `upstream/<base>` (no stale warning needed)
+  - Else: `git rev-list --count <base>..upstream/<base>`. If upstream ahead: effective_base = `upstream/<base>`, warn about stale local base
   - Otherwise (no upstream, fetch failed, or upstream even/behind): effective_base = `<base>`
 - **Blocking prompt** (target + context):
-  - If fork detected (upstream ahead): "Fork detected: <base> is N commits behind upstream/<base>. Looks like an external contribution to [upstream-owner/repo]. Correct? Any context to highlight for the maintainer? (external / internal)"
+  - If fork detected (upstream exists) + stale local base: "Fork detected: local <base> is N commits behind upstream/<base>. Consider rebasing. Looks like an external contribution to [upstream-owner/repo]. Any context to highlight for the maintainer? (external / internal)"
+  - If fork detected (upstream exists) + branch already based on upstream: "External contribution to [upstream-owner/repo]. Any context to highlight for the maintainer? (external / internal)"
   - Otherwise: "Internal PR or external contribution? If external: any context to highlight? (impact, affected users, why it matters)"
   - User says internal → effective_base = local `<base>`, target = internal
   - User says external → keep effective_base (upstream if available), target = external

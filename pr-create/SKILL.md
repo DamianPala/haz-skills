@@ -21,7 +21,13 @@ description: "Create and update Pull Requests with structured descriptions from 
 
 ## Platform detection
 
-Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli": "gh"|"glab", "host": "...", "method": "..."}`. Abort if detection fails (neither CLI authenticated).
+Run `scripts/detect-platform.py` from the skill directory. Returns JSON:
+```json
+{"platform": "github"|"gitlab", "host": "...", "project": "owner/repo", "commands": {...}}
+```
+- `commands` has ready-to-use CLI templates (`mr_get`, `mr_list`, `mr_create` with `{iid}`/`{nr}` placeholders)
+- No `commands` = host recognized but CLI not installed. PR creation unavailable, analysis still works
+- Exit non-zero = detection failed entirely. Abort
 
 ## Modes
 
@@ -36,21 +42,36 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON: `{"cli"
 
 ### Step 1: Validate state
 
-- Current branch from `git branch --show-current`. Abort if on main/master/develop
-- Base branch: check `branch.<name>.merge-base` git config, then remote default branch (`gh repo view` / `glab repo view` / `git remote show origin`), fallback to `main`
-- Fork detection: `git remote get-url upstream 2>/dev/null`
-  - If upstream exists: `git fetch upstream <base> --quiet` (if fetch fails, skip fork detection)
-  - Check if branch is already based on upstream: `git merge-base --is-ancestor upstream/<base> HEAD` (exit 0 = branch includes upstream/<base>)
-  - If branch based on upstream: effective_base = `upstream/<base>` (no stale warning needed)
-  - Else: `git rev-list --count <base>..upstream/<base>`. If upstream ahead: effective_base = `upstream/<base>`, warn about stale local base
-  - Otherwise (no upstream, fetch failed, or upstream even/behind): effective_base = `<base>`
-- **Blocking prompt** (target + context):
-  - If fork detected (upstream exists) + stale local base: "Fork detected: local <base> is N commits behind upstream/<base>. Consider rebasing. Looks like an external contribution to [upstream-owner/repo]. Any context to highlight for the maintainer? (external / internal)"
-  - If fork detected (upstream exists) + branch already based on upstream: "External contribution to [upstream-owner/repo]. Any context to highlight for the maintainer? (external / internal)"
-  - Otherwise: "Internal PR or external contribution? If external: any context to highlight? (impact, affected users, why it matters)"
-  - User says internal → effective_base = local `<base>`, target = internal
-  - User says external → keep effective_base (upstream if available), target = external
-- Count commits ahead: `git rev-list --count <effective_base>..HEAD`. If 0, abort: "No commits ahead of <effective_base>"
+**1a. Where am I:**
+- `git branch --show-current` → abort if on main/master/develop
+- `git remote -v` → detect origin and upstream
+- Base branch: `branch.<name>.merge-base` git config, then remote default branch, fallback to `main`
+- Platform detection: `scripts/detect-platform.py`
+
+**1b. PR target:**
+- Fork detected (upstream remote exists):
+  **Blocking prompt**: "PR target: upstream/<base> ([upstream-owner/repo]) — external contribution. Correct? (external / internal / cancel)"
+  - external → target_remote = upstream, target = external
+  - internal → target_remote = origin, target = internal
+  - cancel → abort
+- No fork:
+  **Blocking prompt**: "PR target: origin/<base> — internal. Any context? (continue / cancel)"
+  - target_remote = origin, target = internal
+
+**1c. Branch freshness:**
+- `git fetch <target_remote> <base> --quiet`
+- `git merge-base --is-ancestor <target_remote>/<base> HEAD`
+- Rebased (exit 0): continue silently
+- Behind (exit ≠ 0):
+  - `git rev-list --count HEAD..<target_remote>/<base>` → N commits behind
+  - **Blocking prompt**: "Branch is N commits behind <target_remote>/<base>. Rebase before creating PR. Run rebase? (yes / skip / cancel)"
+    - yes → `git rebase <target_remote>/<base>`. Success → continue (note: rebased branch will need force-push in Step 6, handled automatically with --force-with-lease). Conflicts → "Rebase conflicts detected. Resolve manually, then re-run pr-create." Abort
+    - skip → proceed with effective_base = `<target_remote>/<base>`
+    - cancel → abort
+- effective_base = `<target_remote>/<base>`
+
+**1d. Commit check and PR mode:**
+- `git rev-list --count <effective_base>..HEAD`. If 0 → abort "No commits ahead of <effective_base>"
 - **Update mode**: find existing PR (`gh pr list --head <branch>` / `glab mr list --source-branch <branch>`). If none found: **Blocking prompt**: "No existing PR for this branch. Create a new one? (y/cancel)"
 
 ### Step 2: Gather context

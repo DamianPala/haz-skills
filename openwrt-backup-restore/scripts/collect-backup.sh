@@ -17,7 +17,7 @@ section() {
 
 should_exclude_custom_file() {
     case "$1" in
-        *.bak | *.bak.* | *.backup | *.backup.* | *backup* | *Backup* | *~)
+        *.bak | *.bak.* | *.backup | *.backup.* | *~)
             return 0
             ;;
         *.log | *.log.* | *.old | *.orig | *.swp | *.tmp)

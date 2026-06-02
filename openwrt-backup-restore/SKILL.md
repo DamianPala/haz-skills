@@ -1,7 +1,7 @@
 ---
 name: openwrt-backup-restore
 description: "Back up or restore OpenWrt 24+ routers from sysupgrade config backups, package manifests, and custom-file archives. Use for OpenWrt backup/restore, apk/opkg package ordering, zrób backup OpenWrt, przywróć router z backupu. Do not trigger for generic networking, router shopping, firmware flashing, or unrelated Linux backups."
-version: 0.1.0
+version: 0.2.0
 ---
 
 # OpenWrt Backup Restore
@@ -95,7 +95,7 @@ Goal: restore packages first, then config, then companion custom files, without 
 
 ### 1) Locate and confirm the backup bundle
 
-Before inspecting cabling or touching the target router, select the backup bundle and inspect its restored LAN IP/netmask.
+Before inspecting cabling or touching the target router, select the backup bundle.
 Use one short prompt:
 
 > Which OpenWrt backup bundle should I restore?
@@ -103,7 +103,7 @@ Use one short prompt:
 
 If the user gives directories, list candidates and ask which one to use.
 If one obvious bundle is found, ask for confirmation.
-Record the restored LAN for later conflict checks and conflict-recovery LAN selection.
+Read the backup's restored LAN IP/netmask later on the router side (step: Inspect the backup before restore), where `uci` is available, rather than extracting the nested archive on the operator machine. If the user already knows the restored LAN, note it now for cabling-recovery LAN selection.
 
 ### 2) Determine current topology
 
@@ -134,8 +134,9 @@ Use read-only SSH or LuCI metadata and collect:
 - `ifstatus wan`
 - current LAN IP and netmask with `uci -q get network.lan.ipaddr` and `uci -q get network.lan.netmask`
 
-If the gateway is OpenWrt and its identity or user confirmation matches the target router, classify the operator machine as already connected to the target.
-Skip the cabling handoff, infer upstream from the target WAN state (`ifstatus wan`, WAN address/mask, gateway, DNS), and continue with target inspection.
+Classify the operator machine as already connected to the target only when the user has explicitly confirmed it in the topology question above.
+Identity signals alone (model, firmware, LAN IP, hostname, SSH key) do NOT establish this; they can match a coincidentally identical router, so never classify on identity match without the user's confirmation.
+Once confirmed, skip the cabling handoff, infer upstream from the target WAN state (`ifstatus wan`, WAN address/mask, gateway, DNS), and continue with target inspection.
 
 If the operator machine is connected directly to the existing upstream router, continue with upstream discovery and cabling handoff.
 
@@ -197,7 +198,8 @@ Use this structure:
 > 11. If internet still does not work, reconnect the operator machine directly to the upstream router and return here with the gateway/IP values you saw.
 
 Choose `{new_lan_ip}` from a simple private subnet that does not overlap the detected upstream subnet.
-If the restored LAN from the backup is known and does not overlap the upstream subnet, prefer that LAN IP so the later config restore does not change it again.
+This is only a temporary recovery address; the backup's actual restored LAN is reconciled later (step: Inspect the backup before restore) and patched if it overlaps the upstream.
+If the restored LAN is already known and does not overlap the upstream subnet, prefer that LAN IP so the later config restore does not change it again.
 For LuCI, use an address without CIDR notation, for example `192.168.10.1`, with netmask `255.255.255.0`.
 
 If access is over the target router Wi-Fi:
@@ -228,22 +230,44 @@ Collect and compare:
 Compare target identity with backup metadata.
 If LAN and WAN overlap, report it as a routing risk and verify router-side internet before package restore.
 If router-side internet fails because LAN and WAN overlap, ask for approval to move the target LAN to a non-overlapping private subnet before package restore.
-Tell the operator the new LAN IP, that SSH/LuCI may disconnect, and that they should reconnect Ethernet or disable/enable the wired connection to renew DHCP before returning.
-Apply the LAN change as the last SSH action and then stop until the operator returns:
+Before applying the change, give the operator this self-contained recovery prompt, because the reload will likely drop this connection:
+
+> I will change the target router LAN from `{old_lan}` to `{new_lan_ip}` and reload its network. This connection will probably drop. After it does:
+>
+> 1. Unplug and reconnect the operator machine Ethernet cable, or disable and re-enable the wired connection, to get a fresh DHCP lease on the new subnet.
+> 2. Wait 1-2 minutes, then open `http://{new_lan_ip}/` to confirm the router responds.
+> 3. If no address arrives, set a temporary manual address on the operator machine in the new subnet, for example `{new_lan_host_ip}` with netmask `255.255.255.0`, then open `http://{new_lan_ip}/`.
+> 4. If unsure which gateway you landed on:
+>    On Windows: open `cmd`, run `ipconfig`, read `Default Gateway`.
+>    On macOS: open Terminal, run `route -n get default`, read `gateway:`.
+>    On Linux: open Terminal, run `ip route | awk '/default/ {print $3; exit}'`.
+> 5. Return to this conversation once you can reach the router again.
+
+Apply the LAN config change, verify the committed UCI values, then reload networking as the last SSH action and stop until the operator returns.
+Preserve the existing config style: option-style LANs (a `network.lan.netmask` value is set) keep `option ipaddr` + `option netmask`; list/CIDR-style LANs use `list ipaddr`.
 
 ```sh
-timeout 20 ssh root@<old-lan-ip> '
+ssh root@<old-lan-ip> '
 set -e
 stamp=$(date +%Y%m%d-%H%M%S)
 cp /etc/config/network /etc/config/network.bak-before-lan-subnet-change-$stamp
-uci -q delete network.lan.ipaddr || true
-uci -q delete network.lan.netmask || true
-uci add_list network.lan.ipaddr="<new-lan-cidr>"
+if uci -q get network.lan.netmask >/dev/null; then
+    uci set network.lan.ipaddr="<new-lan-ip>"
+    uci set network.lan.netmask="<new-lan-netmask>"
+else
+    uci -q delete network.lan.ipaddr
+    uci add_list network.lan.ipaddr="<new-lan-cidr>"
+fi
 uci commit network
-/etc/init.d/network reload
-' || true
+uci -q get network.lan.ipaddr
+uci -q get network.lan.netmask || true
+'
+
+timeout 10 ssh root@<old-lan-ip> '/etc/init.d/network reload'
 ```
 
+The reload command may return non-zero because SSH drops after the LAN change.
+Treat failures before the verified `uci commit` as blocking, but after starting the reload, stop and wait for the operator to reconnect.
 After the operator returns, verify the operator machine DHCP lease, SSH to the new LAN IP, WAN state, and router-side internet before continuing.
 If target WAN internet is unavailable, stop before package restore.
 If the operator machine is already connected to the target router, report the WAN/LAN/routing issue directly instead of referring back to the cabling handoff.
@@ -251,18 +275,37 @@ If the agent reached this point after a cabling handoff, refer back to the hando
 
 ### 6) Inspect the backup before restore
 
-Copy the backup bundle to the router, usually under `/tmp`, then extract it to a temporary directory and inspect it before restoring anything.
-Run inspect and restore commands from the extracted bundle directory.
+Copy the backup bundle to the router, usually under `/tmp`, then inspect it before restoring anything.
+First list the top level with `tar -tzf <bundle.tar.gz>` and classify it before extracting files.
+
+```sh
+tar -tzf /tmp/<bundle.tar.gz> | sed -n '1,40p'
+```
+
+Then set archive roles explicitly:
+
+- Collector bundle: top level holds `config-backup.tar.gz`, `custom-files.tar.gz`, and `manifest.txt`. Create a fresh temporary directory, extract only those expected wrapper files into it, then set `config_archive="$restore_dir/config-backup.tar.gz"`, `custom_archive="$restore_dir/custom-files.tar.gz"`, and `manifest="$restore_dir/manifest.txt"`.
+- Bare `sysupgrade`/LuCI backup: top level holds config paths directly (`etc/config/...`) and no wrapper files. Set `config_archive` to the absolute bundle path, `custom_archive=none`, and `manifest=none`. Warn that companion custom files are not present, skip custom-file restore, and rely on `etc/backup/installed_packages.txt` if present.
+
+Example collector extraction:
+
+```sh
+restore_dir="$(mktemp -d /tmp/restore-bundle.XXXXXX)"
+tar -xzf /tmp/<bundle.tar.gz> -C "$restore_dir" \
+    config-backup.tar.gz custom-files.tar.gz manifest.txt
+config_archive="$restore_dir/config-backup.tar.gz"
+custom_archive="$restore_dir/custom-files.tar.gz"
+manifest="$restore_dir/manifest.txt"
+```
 
 Check:
 
 - bundle contents with `tar -tzf <bundle.tar.gz>`
-- extracted files include `config-backup.tar.gz`, `custom-files.tar.gz`, and `manifest.txt`
-- config archive contents with `tar -tzf config-backup.tar.gz`
-- custom archive paths with `tar -tzf custom-files.tar.gz`
-- custom archive entry types with `tar -tvzf custom-files.tar.gz`
-- package metadata with `tar -O -zxf config-backup.tar.gz etc/backup/installed_packages.txt`
-- firmware, board, package, and custom-file metadata from `manifest.txt`
+- config archive contents with `tar -tzf "$config_archive"`
+- config archive paths for absolute paths, `..` path segments, symlink/device entries, and unexpected top-level paths before `sysupgrade -r`
+- custom archive paths and entry types only when `custom_archive` is not `none`
+- package metadata with `tar -O -zxf "$config_archive" etc/backup/installed_packages.txt`
+- firmware, board, package, and custom-file metadata from `manifest` only when present
 - config files that may trigger package dependencies or service issues
 - target LAN IP/netmask in `etc/config/network`
 
@@ -271,7 +314,7 @@ Example backup LAN check:
 ```sh
 rm -rf /tmp/backup-uci
 mkdir -p /tmp/backup-uci
-tar -O -zxf config-backup.tar.gz etc/config/network > /tmp/backup-uci/network
+tar -O -zxf "$config_archive" etc/config/network > /tmp/backup-uci/network
 uci -c /tmp/backup-uci -q get network.lan.ipaddr
 uci -c /tmp/backup-uci -q get network.lan.netmask
 ```
@@ -285,20 +328,21 @@ Examples of risky config areas:
 - custom hotplug scripts
 
 If the backup appears to come from a different device family or an incompatible OpenWrt major version, stop unless the user explicitly approves an advanced restore risk.
-If `custom-files.tar.gz` contains logs, shell history, backup files, absolute paths, `..` path segments, symlink/device entries, or paths outside the known custom-file locations, stop before extracting it.
+If `custom_archive` is not `none` and contains logs, shell history, backup archives/dumps, absolute paths, `..` path segments, symlink/device entries, or paths outside the known custom-file locations, stop before extracting it.
+Do not reject executable scripts just because their filename contains `backup` when they are inside the known custom-file locations and pass the entry-type checks.
 If the backup LAN subnet overlaps the target WAN upstream subnet, stop before config restore and ask the user to choose a replacement restored LAN, for example `192.168.10.1/24`.
 Record it as the planned restored LAN override and proceed only with explicit approval to restore config and immediately patch LAN before reboot or network reload.
 Use the target WAN upstream subnet from target inspection when already on the target; otherwise use the upstream subnet from operator network discovery.
 
 ### 7) Restore packages before config
 
-Use `etc/backup/installed_packages.txt` from `config-backup.tar.gz` as the main package source when available.
+Use `etc/backup/installed_packages.txt` from `config_archive` as the main package source when available.
 Filter it to packages marked `overlay` or `unknown`; packages marked `rom` are normally part of the image and should not be reinstalled blindly.
 
 Example filter:
 
 ```sh
-tar -O -zxf config-backup.tar.gz etc/backup/installed_packages.txt 2>/dev/null \
+tar -O -zxf "$config_archive" etc/backup/installed_packages.txt 2>/dev/null \
     | awk '$2 == "overlay" || $2 == "unknown" { print $1 }'
 ```
 
@@ -350,7 +394,7 @@ If the repository does not match the flashed firmware, stop and ask the user for
 For a normal full restore, prefer:
 
 ```sh
-sysupgrade -r config-backup.tar.gz
+sysupgrade -r "$config_archive"
 ```
 
 Before running restore:
@@ -375,17 +419,19 @@ If full restore is unsafe, stop. Do not emulate partial restore in v1.
 
 ### 9) Restore custom files
 
-After the config restore completes and the agent has reconnected if needed, restore the companion custom archive:
+After the config restore completes and the agent has reconnected if needed, restore the companion custom archive when `custom_archive` is not `none`.
+If `custom_archive=none`, record that companion custom files were not present and skip this step.
 
 ```sh
-tar -xzf custom-files.tar.gz -C /
+tar -xzf "$custom_archive" -C /
 ```
 
 Before extracting:
 
-- inspect paths with `tar -tzf custom-files.tar.gz`
-- inspect entry types with `tar -tvzf custom-files.tar.gz`
-- reject absolute paths, `..` path segments, symlink/device entries, logs, shell history, backup files, and paths outside the known custom-file locations
+- inspect paths with `tar -tzf "$custom_archive"`
+- inspect entry types with `tar -tvzf "$custom_archive"`
+- reject absolute paths, `..` path segments, symlink/device entries, logs, shell history, backup archives/dumps, and paths outside the known custom-file locations
+- do not reject executable scripts just because their filename contains `backup` when they are inside the known custom-file locations and pass the entry-type checks
 - ask for explicit approval if the archive contains anything unexpected but still plausibly intended
 - remember that custom files may include executable hotplug scripts and credentials
 - if the temporary restore directory disappeared, copy or extract the bundle again before continuing
@@ -425,7 +471,7 @@ logread | tail -n 80
 uci show network
 uci show firewall
 wifi status | sed -E "s/(\"key\": )\"[^\"]+\"/\\1\"<redacted>\"/g"
-tar -tzf custom-files.tar.gz
+test "$custom_archive" = none || tar -tzf "$custom_archive"
 ```
 
 Use service-specific checks only when the backup contains related config.

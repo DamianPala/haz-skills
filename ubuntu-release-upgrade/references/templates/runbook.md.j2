@@ -1,0 +1,200 @@
+# Ubuntu release upgrade runbook: {{ path.from.codename }} -> {{ path.to.codename }}
+
+Generated: {{ generated }}
+Flavor: {{ flavor or "unknown" }} | Desktop: {{ desktop }}
+Path policy: {{ path.prompt_policy }} (meta file: {{ path.meta_file }})
+
+> This file is the source of truth across the mid-upgrade reboot. Tick the checkboxes
+> and append to the Decision log as you go. To RESUME, re-read this file and continue
+> at the first unchecked phase. Never run sudo on the user's behalf: hand each command
+> to the user. Paths like `references/...` refer to files in the skill's own directory.
+
+## Status
+
+- [ ] Phase 0 - Preconditions & backup
+- [ ] Phase 1 - Pre-flight inspection
+- [ ] Phase 2 - Prep
+- [ ] Phase 3 - Upgrade
+- [ ] Phase 4 - Post-upgrade fixes
+- [ ] Phase 5 - Verification
+
+## Upgrade path
+
+- From: {{ path.from.codename }} {{ path.from.version }} {{ path.from.name }}
+- To: {{ path.to.codename }} {{ path.to.version }} {{ path.to.name }}
+- Path open: {{ "YES" if path.path_open else "NO" }}
+- Policy: Prompt={{ path.prompt_policy }} ({% if path.prompt_policy == "lts" %}next LTS only{% elif path.prompt_policy == "never" %}upgrades disabled - set Prompt=normal or lts first{% else %}next release of any kind{% endif %})
+- Advice: {{ path.advice }}
+{% if path.interim_alternative %}
+- Interim alternative (Prompt=lts skips it): {{ path.interim_alternative.codename }} {{ path.interim_alternative.version }} - {{ "available now" if path.interim_alternative.path_open else "not open yet" }}. To target it, set `Prompt=normal` (NOT `-d`).
+{% endif %}
+{% if not path.path_open %}
+
+> STOP: the path is not open yet. Do NOT run do-release-upgrade. Do NOT use `-d`
+> (it targets the development release, not a stable target). Wait for `Supported: 1`.
+{% endif %}
+
+## Hazards detected
+
+### Third-party repositories
+
+{% set codename_entries = repos.entries | selectattr("kind", "equalto", "codename") | list %}
+{% set disabled_entries = repos.entries | rejectattr("enabled") | rejectattr("kind", "equalto", "official") | list %}
+{% set tgt = repos.target_codename or "<target codename>" %}
+{% if codename_entries %}
+Suites pinned to the OLD codename ({{ repos.current_codename }}). After the upgrade, bump to
+`{{ tgt }}` ONLY where the target is available:
+
+| File | URI | Suite | Target ({{ tgt }}) available? |
+|------|-----|-------|------|
+{% for e in codename_entries %}
+| `{{ e.file }}` | {{ e.uri }} | {{ e.suite }} | {% if e.target_available is true %}yes{% elif e.target_available is false %}NO - keep disabled / wait{% else %}unknown (probe failed){% endif %} |
+{% endfor %}
+{% else %}
+No codename-pinned third-party repos detected.
+{% endif %}
+
+{% if disabled_entries %}
+Currently disabled sources (do-release-upgrade disables third-party repos; re-enable
+deliberately after verifying the target suite):
+
+{% for e in disabled_entries %}
+- `{{ e.file }}` ({{ e.format }}, suite `{{ e.suite }}`)
+{% endfor %}
+{% endif %}
+{% if repos.warnings %}
+
+> Repo inventory warnings (verify these files by hand):
+{% for w in repos.warnings %}
+> - {{ w }}
+{% endfor %}
+{% endif %}
+
+### DKMS modules
+
+Run `dkms status` and check each module's kernel pin (see references/hazard-checks.md). A
+module whose pin excludes the target kernel will fail to build and can break boot (GPU /
+network). Record at-risk modules here:
+
+- [ ] `dkms status` reviewed; at-risk modules: _none found / list them_
+
+### Autoremove candidates
+
+Run `apt-get autoremove --purge -s` and classify per references/hazard-checks.md. Protect
+third-party tools and binary-providers with `apt-mark manual` BEFORE any autoremove.
+Record the protect list here:
+
+- [ ] autoremove simulation reviewed; protect with `apt-mark manual`: _list packages_
+
+### Foreign / local packages
+
+Run `apt list --installed 2>/dev/null | grep -F '[installed,local]'` (see
+references/hazard-checks.md). These are not updated by the upgrade; add a repo now or plan a
+manual reinstall after.
+
+- [ ] foreign packages reviewed; add repo before / reinstall after: _list packages_
+
+## Phase 0 - Preconditions & backup
+
+- [ ] Full, RESTORABLE backup confirmed (BorgMatic / image / snapshot)
+- [ ] On AC power, stable wired network, enough time (1-2h)
+- [ ] If over SSH: running inside screen/tmux (do-release-upgrade refuses a plain SSH
+  session; it opens a backup sshd on port 1022)
+- [ ] System readiness: free space (`df -h / /var /boot`, esp. /boot), no blocking
+  held/pinned packages (`apt-mark showhold`), clean state (`sudo dpkg --audit`, `apt-get check`)
+- [ ] Non-standard setup noted (encrypted/RAID disks, unusual mounts, services/DBs needing
+  manual stop or backup): _none / list_
+- [ ] Upgrade path open (see above)
+
+## Phase 1 - Pre-flight inspection
+
+- [ ] This runbook generated and reviewed with the user
+- [ ] Hazards above understood and planned
+
+## Phase 2 - Prep (commands run by the USER; the agent NEVER runs sudo)
+
+- [ ] Fully update the current release first:
+  ```bash
+  sudo apt update && sudo apt full-upgrade
+  ```
+- [ ] Update any DKMS module whose pin excludes the target kernel (from the DKMS check
+  above) to a target-kernel-capable release, then `sudo dkms autoinstall`. Secure Boot: a
+  rebuilt module must be re-signed; enroll the MOK if prompted. See references/hazard-checks.md.
+{% set ns = namespace(has_ppa=false) %}
+{% for e in codename_entries %}
+{% if "ppa" in e.uri or "launchpad" in e.uri %}
+{% set ns.has_ppa = true %}
+{% endif %}
+{% endfor %}
+{% if ns.has_ppa %}
+- [ ] Revert conflicting PPAs to distro versions (avoids held-back upgrades), one per PPA:
+{% for e in codename_entries %}
+{% if "ppa" in e.uri or "launchpad" in e.uri %}
+  - from `{{ e.uri }}` -> `sudo ppa-purge ppa:<owner>/<name>`
+{% endif %}
+{% endfor %}
+  Do any backports/staging PPA FIRST - a PPA shipping newer versions of distro packages is
+  the most common upgrade blocker.
+  `ppa-purge ppa:<owner>/<name>` defaults to the CURRENT release. Do NOT pass `-d` or a
+  suite that is not in your sources yet. Read the owner/name from the URI path.
+{% endif %}
+- [ ] Protect the tools you identified above before any autoremove:
+  `sudo apt-mark manual <packages>`. Then review the autoremove set; do NOT blindly purge.
+
+## Phase 3 - Upgrade
+
+- [ ] Run the upgrade (path must be open; NEVER use `-d` for a stable target):
+  ```bash
+  sudo do-release-upgrade
+  ```
+- [ ] Handle each conffile prompt deliberately. For each one, the agent classifies it with
+  the `classify-conffile` helper (see references/conffile-classification.md for the
+  invocation and the decision table). Default to KEEPING your version (N) unless you never
+  edited the file. Log each decision below.
+- [ ] Reboot when prompted (this runbook persists across the reboot)
+
+## Phase 4 - Post-upgrade fixes
+
+- [ ] Re-enable and migrate third-party repos deliberately (the list below is the
+  PRE-upgrade state; a PPA you ppa-purged in Phase 2 is gone - do not bump it):
+{% for e in codename_entries %}
+{% if e.target_available is true %}
+  - `{{ e.file }}`: bump suite `{{ e.suite }}` -> `{{ tgt }}`
+{% elif e.target_available is false %}
+  - `{{ e.file }}`: SKIP bump - target `{{ tgt }}` not published yet; keep disabled
+{% else %}
+  - `{{ e.file }}`: VERIFY `{{ tgt }}` exists before enabling (probe unknown); keep disabled until confirmed
+{% endif %}
+{% endfor %}
+{% for e in disabled_entries %}
+  - re-enable `{{ e.file }}` if still wanted (verify target suite first)
+{% endfor %}
+- [ ] `sudo apt update` - resolve any errors before continuing
+- [ ] Reinstall/rebuild foreign packages that had no repo (from Hazards); rebuild their
+  kernel modules for the new kernel if any
+{% if desktop == "kde" %}
+- [ ] KDE: check SDDM session config (see references/post-upgrade-fixes.md)
+- [ ] KDE: after first login, verify the desktop survived the upgrade (panels, theme,
+  widgets, shortcuts); reconfigure anything that looks off
+{% endif %}
+- [ ] Re-simulate autoremove (`apt-get autoremove --purge -s`) - the orphan set differs
+  post-upgrade. Confirm the protect list still holds, then `sudo apt autoremove --purge`
+
+## Phase 5 - Verification
+
+- [ ] `dkms status` - every module built `installed` for the new kernel
+- [ ] GPU / display works (and SR-IOV / passthrough if used)
+- [ ] Audio works (PipeWire restart crash during the swap is benign)
+- [ ] `apt-get check` and `dpkg --audit` clean; no broken packages
+- [ ] Snaps / Flatpaks refreshed if used
+- [ ] `lsb_release -a` shows the new release
+
+## Decision log
+
+| Date | Item | Decision | Why |
+|------|------|----------|-----|
+| {{ generated }} | runbook | generated | path {{ "open" if path.path_open else "closed" }} |
+
+## Notes
+
+(Free space for anything that comes up during the upgrade.)

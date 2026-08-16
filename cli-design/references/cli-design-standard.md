@@ -1,12 +1,12 @@
-# Agent-First CLI Design Standard
+# CLI Design Standard for Humans and Agents
 
-> **Version:** 0.1.0-draft.1
+> **Version:** 0.1.0-draft.3
 >
 > **Status:** Working draft. This document is not yet a conformance target.
 
 ## Scope
 
-This document defines the contract for both greenfield agent-first command-line tools and brownfield tools being adapted for reliable use by agents. It includes machine-readable introspection and the minimum safety contract for repeated and mutating operations.
+This document defines the contract for greenfield command-line tools and brownfield tools being adapted for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations.
 
 The standard is independent of the operating system, shell, implementation language, framework, and backend. Arguments, standard streams, environment variables, exit codes, and TTY refer to the equivalent process interfaces on each platform. Command examples use POSIX-like notation for readability and are non-normative.
 
@@ -26,16 +26,9 @@ Tests and conformance tools can verify these requirements, but this document rem
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted as described in BCP 14 (RFC 2119 and RFC 8174) when, and only when, they appear in all capitals. Synonymous BCP 14 terms are not used.
 
-## Requirement policy
+## Maintenance
 
-This section governs changes to this standard. A candidate requirement MUST satisfy P1-P6 before it enters the normative standard. These policies do not impose requirements on conforming tools.
-
-- **P1: A requirement MUST address a material caller contract, failure mode, safety risk, or interoperability need.** It SHOULD be supported by an established convention, an observed failure, or explicit engineering reasoning. Aesthetic preferences and implementation taste belong in guidance, not the standard.
-- **P2: A requirement MUST define a verifiable outcome.** Its pass or fail condition MUST be observable through behavior, a contract test, or a deterministic audit. Otherwise it belongs in implementation guidance.
-- **P3: A requirement MUST be placed according to its scope.** It belongs in this standard only if it applies to every conforming tool or states an observable applicability condition explicitly. An isolated narrow recommendation belongs in implementation guidance.
-- **P4: A requirement MUST state the minimum necessary contract once.** It specifies an outcome rather than an implementation mechanism unless the mechanism is necessary for interoperability, safety, or verification. Other rules cross-reference it instead of restating it. Examples and rationale clarify a requirement but do not expand it.
-- **P5: A requirement MUST use the weakest normative keyword that preserves its purpose.** Its strength and implementation cost MUST be proportionate to the consequence of non-conformance.
-- **P6: A requirement MUST be practical to implement, verify, and maintain throughout the tool's lifecycle.** A requirement that demands disproportionate engineering effort, predictably drifts out of conformance, or lacks a credible implementation path belongs in implementation guidance or MUST be rejected.
+The non-normative [maintenance guide](cli-design-standard-maintenance.md) defines the admission policy and verification workflow for changes to this standard. It is not part of conformance.
 
 ## Stage D: Discovery and introspection
 
@@ -45,7 +38,7 @@ A caller should be able to choose a command and construct a valid call without r
 
 - **D2: Discovery has three layers.** `--help` MUST provide the quick start, and `tool schema` MUST provide the exact contract. `SKILL.md` or `AGENTS.md` MAY add domain or workflow context when the first two layers are not enough.
 
-- **D3: Root `--help` MUST be a standalone cheat sheet.** It MUST state the tool's purpose, list its commands or groups, and point to `tool schema`. When any command returns success data beyond its exit status, root help MUST also point to `--json` under O2. It SHOULD show non-obvious common workflows as literal invocations. Each command MUST provide its own `--help`. When the command list grows, help MUST group commands rather than omit them.
+- **D3: Root `--help` MUST be a standalone cheat sheet.** It MUST state the tool's purpose, list its commands or groups, and point to `tool schema`. When any command returns success data beyond its exit status, root help MUST also point to `--json` under O2. It SHOULD show non-obvious common workflows as literal invocations. Each command MUST provide `--help` that states its purpose and usage and describes its arguments, command-specific flags, and applicable defaults. When the command list grows, help MUST group commands rather than omit them.
 
 - **D4: Speak the shared vocabulary.** Related commands MUST follow a predictable structure (`tool <noun> <verb>` or `tool <verb>`). For equivalent operations, greenfield commands SHOULD prefer `get`, `list`, `create`, and `delete` to `info`, `ls`, and `add`; managed-operation commands SHOULD use `status`, `wait`, and `cancel`, plus `pause` and `resume` for resumable suspension. A canonical flag name MUST keep the same meaning wherever it appears; aliases MAY remain for compatibility. Root `--version` MUST exist. Brownfield names MAY remain for compatibility.
 
@@ -68,7 +61,7 @@ A caller should be able to choose a command and construct a valid call without r
 
 - **D6: `tool schema` MUST expose the command interface as JSON.**
 
-  - Source: command paths, arguments, flags, and parser defaults MUST come from the parser definitions. Other metadata MUST come from shared definitions, not duplicated documentation.
+  - Consistency: command paths, arguments, flags, and defaults exposed by schema MUST match the parser used at runtime. Shared definitions, generation, and conformance tests are all valid ways to enforce this.
   - Execution: schema MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts.
   - Routing: `tool schema` MUST return the D7 index, and a command path MUST return D8 detail. Each segment of a command path MUST be passed as a separate argument in the order shown by D7 `commands[].name`.
   - Errors: an unknown path MUST be a usage error and name the nearest valid paths.
@@ -102,8 +95,8 @@ A caller should be able to choose a command and construct a valid call without r
   | `confirm` | boolean | always | MUST be `true` when any valid call may require `--yes`; see R3. |
   | `interactive` | boolean | always | MUST be `true` when any valid invocation starts an I5 interactive session and `false` otherwise. |
   | `stream` | boolean | success emits a record stream | MUST be `true`. `output` describes one record; see O7. |
-  | `output` | object | success conveys data beyond the exit status | O4 JSON Schema for the success document or one O7 record. |
-| `exit_codes` | object | adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
+  | `output` | object | success conveys data beyond the exit status, or R5 applies | O4 JSON Schema for the success document or one O7 record. |
+  | `exit_codes` | object | adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
   | `format_defaults` | object | differs from tool default | O2 output defaults. |
 
 #### Example
@@ -210,7 +203,7 @@ $ mytool schema deploy
 
 `deploy` inherits tool-wide exit codes and format defaults, so it omits both fields.
 
-- **D9: The introspection contract MUST be stable and versioned.** Consumers are expected to ignore unknown fields in introspection documents and structured output. Additive introspection fields MAY keep `schema_version`, and additive optional output fields MAY stay within a compatibility line. Removing an introspection field or changing its type or meaning MUST increment `schema_version`. Within a documented compatibility line derived from `tool_version`, existing command paths, input meanings and defaults, exit code meanings, and structured output fields MUST remain compatible. An incompatible change MUST start a new compatibility line and provide a migration path; changing `schema_version` alone is not enough.
+- **D9: The introspection contract MUST be stable and versioned.** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. Adding optional introspection or output fields MAY keep `schema_version`; removing an introspection field or changing its type or meaning MUST increment it. Tool versions documented as compatible MUST preserve existing command paths, input meanings and defaults, exit code meanings, and structured output fields. An incompatible change MUST document its replacement and migration; changing `schema_version` alone is insufficient.
 
 - **D10: Agent guidance MUST add context, not repeat the interface.** The tool MAY ship `SKILL.md` or `AGENTS.md` when domain knowledge or workflows need explanation. Guidance MUST point to commands and schema, and MUST NOT duplicate their catalogs.
 
@@ -268,9 +261,8 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 
 - **I5: Non-interactive behavior MUST be explicit and fail safely.**
 
-  - Path: every command with `interactive: false` MUST have a non-interactive path. A command with `interactive: true` MAY also provide one.
   - Prompts: a command MAY prompt only when stdin is a TTY and the selected stdout format is human-readable. Otherwise, it MUST NOT prompt. If required input or confirmation remains unresolved, it MUST fail with an error that names a flag, file, stdin form, or environment variable that can supply it. The absence of a permitted prompt MUST NOT be treated as consent.
-  - Interactive sessions: a command MAY start an interactive session only when stdin is a TTY and MUST fail before side effects otherwise. A command that offers such a session MUST declare `interactive: true` in D8.
+  - Interactive sessions: a command MAY start an interactive session only when stdin and stdout are TTYs and the selected stdout format is human-readable. It MUST fail before side effects otherwise. A command that offers such a session MUST declare `interactive: true` in D8.
   - Human action: a workflow MAY require an out-of-band human action. Its non-interactive entry point MUST be discoverable through D7 and D8. Work that continues after that command exits follows Stage M.
   - Paging: a pager MAY start only when stdout is a TTY and the selected format is human-readable; see H3.
 
@@ -341,7 +333,7 @@ This stage covers calls that mutate state or may be repeated. Safeguards follow 
 
 - **R6: Built-in retries MUST be safe and bounded.** A CLI that retries requests internally:
 
-  - MUST retry only errors classified as retryable through F3, and only for `read_only` or `idempotent` commands, or requests protected by an idempotency key;
+  - MUST retry only failures that would be reported with `retryable: true` under F3, and only for `read_only` or `idempotent` commands, or requests protected by an idempotency key;
   - MUST preserve the original inputs, limit the number of attempts, and remain within the I8 timeout;
   - SHOULD honor `Retry-After` when the timeout allows.
 
@@ -372,6 +364,7 @@ A caller should be able to select a representation before execution, parse stdou
   - Consistency:
     - Human and machine renderings MAY differ in detail.
     - They MUST NOT contradict each other.
+    - When human-readable output is only a bounded preview of the result, it MUST say so and identify how to retrieve the complete result.
   - Untrusted content:
     - Machine output MUST serialize caller-controlled and remote values through the selected format.
     - Human output MUST escape terminal control sequences in those values.
@@ -435,6 +428,7 @@ A caller should be able to select a representation before execution, parse stdou
 
   - Window: a collection without a documented finite maximum MUST use a finite default limit and accept `--limit` and `--cursor`.
   - Continuation: each JSON page MUST contain an `items` array and `next_cursor`. The cursor MUST be an opaque string that the caller passes unchanged to `--cursor`, or `null` on the final page.
+  - Resume: source, filters, and order MUST remain unchanged when using `--cursor`; the limit and output format MAY change. If the cursor is invalid, expired, incompatible, or cannot continue the same result set, the command MUST fail with non-zero exit and F3 `kind` `cursor_unavailable`. It MUST NOT silently restart from another position.
   - Stability: pagination MUST use a stable, documented order and document whether pages read live state or one fixed snapshot. The tool MUST bound the number of items, not silently omit fields from individual items.
   - Shape: a collection with a documented finite maximum MAY use a bare array. An empty collection MUST use the same shape with an empty array, not `null` or absent output.
 
@@ -455,10 +449,10 @@ A caller should be able to select a representation before execution, parse stdou
 - **O7: Record streams MUST be bounded, framed, and resumable.** For a command with D8 `stream: true`, `output` MUST be an object schema with `cursor` as a required string property.
 
   - Framing: `--json` MUST emit UTF-8 NDJSON with one complete JSON object per LF-terminated line and no blank lines. Each record MUST conform to D8 `output` and become readable before the command waits for another record or exits. O5 value and time rules and D9 compatibility rules apply to each record.
-  - Window: without `--follow`, the command MUST terminate. A stream without a documented finite maximum MUST use a finite default limit and accept `--limit`. Reaching the limit ends that read, not the record source.
+  - Window: without `--follow`, the command MUST terminate. A stream without a documented finite maximum MUST use a finite default limit and accept `--limit`. `--follow` removes that default limit. An explicit `--limit` remains effective with or without `--follow` and ends the read after that many records. Reaching a limit ends that read, not the record source.
   - Ordering: the stream MUST use a stable, documented order and MUST NOT stop before the effective limit while matching records are available.
   - Continuation: each `cursor` MUST be a non-empty opaque string. The command MUST accept `--after-cursor` and resume strictly after that record without skipping any matching record in the same logical stream. Inputs selecting the source, filters, or order MUST remain the same; limits, following, timeouts, and output format MAY change. If this continuation cannot be guaranteed because the cursor or required history is invalid, expired, or incompatible, the command MUST fail with non-zero exit and F3 `kind` `cursor_unavailable`; it MUST NOT silently resume elsewhere.
-  - Following: an unbounded mode MAY exist, SHOULD be named `--follow`, and MUST require explicit selection under I8.
+  - Following: a follow mode MAY exist, SHOULD be named `--follow`, and MUST require explicit selection under I8. Without an explicit `--limit`, it is unbounded.
   - Completion: exit `0` means the requested read ended successfully, not that the record source is exhausted; empty stdout is valid. After a non-zero exit, prior LF-terminated records remain valid and an unterminated final fragment is not a record. This standard defines no end record; EOF and the exit status are authoritative.
 
   Example command schema excerpt:
@@ -560,6 +554,8 @@ Failures need a stable machine signal and enough information for the caller to c
   {"error":{"kind":"outcome_unknown","message":"The deployment request timed out and its outcome could not be determined","retryable":false,"context":{"deployment":"dep_123"}}}
   ```
 
+- **F5: User interruption MUST fail honestly.** A command that receives the platform's normal user-interrupt request MUST exit without a stack trace and fail through F2-F3 with `kind` `interrupted`, unless F4 requires `outcome_unknown`. Interrupting observation of managed work MUST NOT cancel or otherwise change that work.
+
 ## Stage M: Managed operations
 
 A managed operation is work that continues after the command that started it exits. A tool without such work has no Stage M requirements.
@@ -572,10 +568,12 @@ A managed operation is work that continues after the command that started it exi
 
   - Both commands MUST declare `effects: read_only`.
   - The status command MUST report the current state without waiting for a terminal state.
-  - Structured results from both commands MUST contain `status` and the identifier under the same field name. The D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate.
+  - Structured results from both commands MUST contain `status` and the identifier under the same field name. The D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail through F2-F3 and MUST NOT return `unknown`.
   - Any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail through F2-F3 and MUST NOT be reported as an operation state.
   - The wait command MUST exit `0` when it successfully observes any terminal state. The operation outcome MUST be reported by `status` and MUST NOT change that exit code. Failure to observe the operation MUST fail through F2-F3.
   - The wait command MUST follow I8 and return immediately when the operation is already terminal. Timing out or terminating it MUST NOT cancel or otherwise change the operation, and MUST NOT be reported as a terminal operation outcome.
+
+  Operation logs and events MAY supplement status and wait, but MUST NOT replace them.
 
 - **M3: Cancellation MUST be honest.** If a managed operation can be canceled, the tool MUST provide a non-interactive cancellation command whose name follows D4. It MUST accept the identifier returned under M1, declare `effects: idempotent`, and follow Stage R. Structured success MUST contain `status` and the identifier under the same field name; R5 supplies `changed`. Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
 
@@ -590,9 +588,7 @@ A managed operation is work that continues after the command that started it exi
   {"job_id":"job_123","status":"canceled"}
   ```
 
-- **M4: Resumable suspension MUST remain distinct from cancellation.** If managed work can be suspended and later resumed from the same point, the tool MUST expose non-interactive suspension and resumption commands whose names follow D4. While suspended, structured status MUST be `paused` and non-terminal. Cancellation under M3 remains terminal and MUST NOT mean suspension.
-
-Operation logs and events are optional. A structured record stream for them MUST follow O7 and does not replace status.
+- **M4: Resumable suspension MUST remain distinct from cancellation.** If managed work can be suspended and later resumed from the same point, the tool MUST expose non-interactive suspension and resumption commands whose names follow D4. Both MUST accept the identifier returned under M1, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success. They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M3 remains terminal and MUST NOT mean suspension.
 
 ## Stage H: Human interface
 
@@ -622,7 +618,7 @@ A person at the terminal should find familiar flag names, standard environment b
 
 - **H4: Color MUST remain optional.** A tool that emits color MUST disable it when `NO_COLOR` is non-empty or the output stream is not a TTY, unless explicit color control overrides that default. Color MUST NOT be the only carrier of information. If provided, color flags MUST use `--color=always|never`; `--no-color` MAY be provided as `--color=never`.
 
-- **H5: List-like commands SHOULD offer `--plain`.** When selected, it MUST print one item per line, each ending in LF (`\n`), with no heading or terminal decoration. The line format MUST be documented and stable. If a value can contain a newline, its escaping MUST be documented. If the command also accepts `--format`, `--plain` MUST produce the same output as `--format plain`.
+- **H5: List-like commands with complete results SHOULD offer `--plain`.** A paginated command MAY offer it only for a page explicitly selected with `--limit` or `--cursor`. `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
 
   ```console
   $ mytool services list --plain

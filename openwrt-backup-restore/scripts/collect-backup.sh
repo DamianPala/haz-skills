@@ -6,8 +6,18 @@ BACKUP_FILE="$OUT_DIR/config-backup.tar.gz"
 CUSTOM_FILE="$OUT_DIR/custom-files.tar.gz"
 CUSTOM_LIST="$OUT_DIR/custom-files.list"
 STANDARD_LIST="$OUT_DIR/config-files.list"
+SCAN_LIST="$OUT_DIR/scan-files.list"
+OWNED_LIST="$OUT_DIR/package-owned.list"
 MANIFEST_FILE="$OUT_DIR/manifest.txt"
 BUNDLE_FILE="${2:-/tmp/openwrt-backup-bundle.tar.gz}"
+
+# Directories holding only operator-added files; safe to scan without a
+# package index.
+SAFE_CUSTOM_DIRS="/etc/hotplug.d /etc/profile.d /root/bin /usr/local"
+
+# Directories mixing operator scripts with packaged binaries. Scanned only
+# when a package file index is available to subtract the packaged ones.
+SYSTEM_CUSTOM_DIRS="/etc/init.d /usr/sbin /usr/bin"
 
 mkdir -p "$OUT_DIR"
 
@@ -39,9 +49,23 @@ is_allowed_custom_path() {
         /etc/hotplug.d/* | /etc/profile.d/* | /root/bin/* | /usr/local/* | /etc/rc.local)
             return 0
             ;;
+        /etc/init.d/* | /usr/sbin/* | /usr/bin/*)
+            return 0
+            ;;
     esac
 
     return 1
+}
+
+# Files belonging to installed packages. Whatever remains in the scanned
+# directories was put there by the operator.
+list_package_owned_files() {
+    if command -v apk >/dev/null 2>&1; then
+        xargs apk info --who-owns 2>/dev/null < "$SCAN_LIST" |
+            sed -n 's/^\(.*\) is owned by .*/\1/p'
+    elif command -v opkg >/dev/null 2>&1; then
+        cat /usr/lib/opkg/info/*.list 2>/dev/null
+    fi
 }
 
 add_custom_file() {
@@ -61,26 +85,38 @@ collect_custom_files() {
     : > "$CUSTOM_LIST"
     tar -tzf "$BACKUP_FILE" 2>/dev/null | sort > "$STANDARD_LIST"
 
+    scan_dirs="$SAFE_CUSTOM_DIRS"
+    if command -v apk >/dev/null 2>&1 || command -v opkg >/dev/null 2>&1; then
+        scan_dirs="$scan_dirs $SYSTEM_CUSTOM_DIRS"
+    fi
+
+    : > "$SCAN_LIST"
+    for dir in $scan_dirs; do
+        [ -d "$dir" ] || continue
+        find "$dir" -type f 2>/dev/null >> "$SCAN_LIST"
+    done
+    if [ -f /etc/rc.local ]; then
+        printf '%s\n' /etc/rc.local >> "$SCAN_LIST"
+    fi
+    sort -u "$SCAN_LIST" -o "$SCAN_LIST"
+
+    list_package_owned_files | sort -u > "$OWNED_LIST"
+
+    # Directory scan is the only way to find operator scripts outside /etc,
+    # because apk audit reports nothing beyond /etc even when given a path.
+    (grep -Fxv -f "$OWNED_LIST" "$SCAN_LIST" 2>/dev/null || true) |
+        while IFS= read -r file; do
+            add_custom_file "$file"
+        done
+
+    # apk audit adds packaged files the operator has modified, which the
+    # ownership subtraction above deliberately skips.
     if command -v apk >/dev/null 2>&1; then
         (apk audit 2>/dev/null || true) |
             awk '$1 ~ /^[AU]$/ { print "/" $2 }' |
             while IFS= read -r file; do
                 add_custom_file "$file"
             done
-    else
-        for dir in \
-            /etc/hotplug.d \
-            /etc/profile.d \
-            /root/bin \
-            /usr/local
-        do
-            [ -d "$dir" ] || continue
-            find "$dir" -type f 2>/dev/null | while IFS= read -r file; do
-                add_custom_file "$file"
-            done
-        done
-
-        add_custom_file /etc/rc.local
     fi
 
     sort -u "$CUSTOM_LIST" -o "$CUSTOM_LIST"
@@ -160,8 +196,11 @@ collect_custom_files
     section "custom_file_candidates_from_apk_audit"
     if command -v apk >/dev/null 2>&1; then
         (apk audit 2>/dev/null || true) |
-            awk '$1 ~ /^[AU]$/ && ($2 ~ /^etc\/hotplug\.d\// || $2 ~ /^etc\/profile\.d\// || $2 == "etc/rc.local" || $2 ~ /^root\/bin\// || $2 ~ /^usr\/local\//) { print }'
+            awk '$1 ~ /^[AU]$/ && ($2 ~ /^etc\/hotplug\.d\// || $2 ~ /^etc\/profile\.d\// || $2 == "etc/rc.local" || $2 ~ /^root\/bin\// || $2 ~ /^usr\/local\// || $2 ~ /^etc\/init\.d\// || $2 ~ /^usr\/s?bin\//) { print }'
     fi
+
+    section "scanned_files_not_owned_by_packages"
+    (grep -Fxv -f "$OWNED_LIST" "$SCAN_LIST" 2>/dev/null || true)
 } >> "$MANIFEST_FILE"
 
 tar -czf "$BUNDLE_FILE" -C "$OUT_DIR" config-backup.tar.gz custom-files.tar.gz manifest.txt

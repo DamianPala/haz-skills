@@ -1,7 +1,7 @@
 ---
 name: openwrt-backup-restore
 description: "Back up or restore OpenWrt 24+ routers from sysupgrade config backups, package manifests, and custom-file archives. Use for OpenWrt backup/restore, apk/opkg package ordering, zrób backup OpenWrt, przywróć router z backupu. Do not trigger for generic networking, router shopping, firmware flashing, or unrelated Linux backups."
-version: 0.2.0
+version: 0.3.0
 ---
 
 # OpenWrt Backup Restore
@@ -80,7 +80,11 @@ The bundle contains:
 - `custom-files.tar.gz`, selected custom files not already in `config-backup.tar.gz`
 - `manifest.txt`, firmware, board, storage, routing, package metadata, custom file list, `sysupgrade -l`, `/etc/sysupgrade.conf`, `apk audit`, and installed-package diagnostics
 
-The custom archive is limited to known custom-file locations: `/etc/hotplug.d`, `/etc/profile.d`, `/root/bin`, `/usr/local`, and `/etc/rc.local`.
+The custom archive is limited to known custom-file locations: `/etc/hotplug.d`, `/etc/profile.d`, `/root/bin`, `/usr/local`, `/etc/rc.local`, plus `/etc/init.d`, `/usr/sbin`, and `/usr/bin`.
+
+The last three normally hold packaged binaries, so the collector scans them only when a package file index is available and keeps just the files no package owns (`apk info --who-owns`, or `/usr/lib/opkg/info/*.list` on opkg). Without a package manager they are skipped entirely.
+
+Do not rely on `apk audit` alone to find custom files: it reports nothing outside `/etc`, even when given an explicit directory, so operator scripts in `/usr/sbin` would be missed. The directory scan finds added files anywhere; `apk audit` still contributes packaged `/etc` files the operator modified.
 
 ### 4) Transfer the backup off the router
 

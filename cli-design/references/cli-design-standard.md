@@ -43,9 +43,9 @@ A caller should be able to choose a command and construct a valid call without r
 
 - **D1: Published interfaces MUST match actual behavior.** Help, schema, documentation for the installed tool version, and shipped agent guidance MUST agree with the tool and with each other.
 
-- **D2: Discovery has three layers.** `--help` MUST provide the quick start, and the introspection command MUST provide the exact contract. `SKILL.md` or `AGENTS.md` MAY add domain or workflow context when the first two layers are not enough.
+- **D2: Discovery has three layers.** `--help` MUST provide the quick start, and the introspection command MUST provide the exact command-line contract. `SKILL.md` or `AGENTS.md` MAY add domain or workflow context when the first two layers are not enough.
 
-- **D3: Root `--help` MUST be a standalone cheat sheet.** It MUST state the tool's purpose, list its commands or groups, and state the literal invocation of the introspection command. When any command returns success data beyond its exit status, root help MUST also point to `--json` under O2. It SHOULD show non-obvious common workflows as literal invocations. Each command MUST provide `--help` that states its purpose and usage and describes its arguments, command-specific flags, and applicable defaults. When the command list grows, help MUST group commands rather than omit them.
+- **D3: Root `--help` MUST be a standalone cheat sheet.** It MUST state the tool's purpose, list its named commands or groups, if any, and state the literal invocation of the introspection command. When any command returns success data beyond its exit status, root help MUST also point to `--json` under O2. It SHOULD show non-obvious common workflows as literal invocations. Each command MUST provide `--help` that states its purpose and usage and describes its arguments, command-specific flags, and applicable defaults. When the command list grows, help MUST group commands rather than omit them.
 
 - **D4: Speak the shared vocabulary.** Related commands MUST follow a predictable structure (`tool <noun> <verb>` or `tool <verb>`). For equivalent operations, greenfield commands SHOULD prefer `get`, `list`, `create`, and `delete` to `info`, `ls`, and `add`; managed-operation commands SHOULD use `status`, `wait`, and `cancel`, plus `pause` and `resume` for resumable suspension. A canonical flag name MUST keep the same meaning wherever it appears; aliases MAY remain for compatibility. Root `--version` MUST exist. Brownfield names MAY remain for compatibility.
 
@@ -71,8 +71,8 @@ A caller should be able to choose a command and construct a valid call without r
   - Entry: the introspection command MUST be unambiguous from the arguments alone and MUST NOT dispatch to a retained domain operation. On greenfield paths, `schema` as the first argument MUST be reserved for introspection. When a retained contract already uses `schema` as its first argument, the tool MUST provide introspection in another form, such as a prefix (`tool contract schema`) or a flag (`tool --schema`).
   - Consistency: command paths, arguments, flags, and defaults exposed by schema MUST match the parser used at runtime. Shared definitions, generation, and conformance tests are all valid ways to enforce this.
   - Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts.
-  - Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return D8 detail. Each segment of a command path MUST be passed as a separate argument in the order shown by D7 `commands[].name`.
-  - Errors: an unknown path MUST be a usage error and name the nearest valid paths.
+  - Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return D8 detail. A command path's segments are the parts of D7 `commands[].name` split on U+0020; each segment MUST be passed as a separate argument in that order. A tool with exactly one command and no command path MUST list that command with `name` `""` and include its D8 detail as D7 `command`; any argument after the introspection command is then an unknown path.
+  - Errors: an unknown path MUST be a usage error and name the nearest valid paths, if any.
 
 - **D7: The schema index MUST let callers choose a command safely.** It MUST contain the following fields.
 
@@ -80,15 +80,14 @@ A caller should be able to choose a command and construct a valid call without r
   |---|---|---|
   | `schema_version` | string | Introspection format version. |
   | `tool_version` | string | Value reported by `--version`. |
-  | `detail` | string | Command template; replace `<command>` with the full command path as separate arguments. |
   | `global_flags` | array | I1 flag descriptors accepted by every command. D8 `flags` MUST NOT repeat them. |
   | `format_defaults` | object | O2 default format for each output context. |
   | `exit_codes` | object | F1 tool-wide exit code meanings. |
-  | `errors` | object | F2-F3 structured error contract. |
   | `conformance` | object | Conformance claim. `standard` MUST equal this document's version. `extensions` MUST contain each claimed extension exactly once; a caller that does not recognize an extension name MUST NOT rely on that extension. |
-  | `commands` | array | Sorted, flat routing list of every invocable command by full path; excludes the introspection command. |
+  | `commands` | array | Flat routing list of every invocable command by full path, sorted by `name` in Unicode code point order; excludes the introspection command. |
+  | `command` | object | Present exactly when the tool has one unnamed command: that command's D8 detail. |
 
-  Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `description` MUST distinguish neighboring commands, and `effects` MUST follow R1. Command detail, not the index, MUST contain enough information to construct a call.
+  Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `name` MUST consist of non-empty segments separated by exactly one U+0020, or be `""` for the unnamed command, and MUST be unique within `commands`. `description` MUST distinguish neighboring commands, and `effects` MUST follow R1. Command detail, not a command entry, MUST contain enough information to construct a call.
 
 - **D8: Command detail MUST expose the command contracts.**
 
@@ -96,7 +95,7 @@ A caller should be able to choose a command and construct a valid call without r
 
   | Field | JSON type | Presence | Contract |
   |---|---|---|---|
-  | `name` | string | always | Full command path. |
+  | `name` | string | always | Full command path, or `""` for a tool with one unnamed command. |
   | `description` | string | always | One-line purpose. |
   | `args` | array | always | I1 positional argument descriptors. |
   | `flags` | array | always | I1 command-specific flag descriptors. Effective flags are D7 `global_flags` plus this array. |
@@ -121,7 +120,6 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "detail": "mytool schema <command>",
   "global_flags": [
     {
       "name": "json",
@@ -140,7 +138,6 @@ $ mytool schema
   ],
   "format_defaults": {"tty": "text", "non_tty": "json"},
   "exit_codes": {"0": "success", "1": "failure", "2": "usage error"},
-  "errors": {"channel": "stderr", "position": "last_line", "format": "json"},
   "conformance": {"standard": "0.1.0-draft.3", "extensions": []},
   "commands": [
     {"name": "deploy", "description": "Deploy a service", "effects": "non_idempotent"},
@@ -148,6 +145,8 @@ $ mytool schema
   ]
 }
 ```
+
+`services list` is one entry with two segments, fetched as `mytool schema services list`.
 
 ```console
 $ mytool schema deploy
@@ -213,7 +212,39 @@ $ mytool schema deploy
 
 `deploy` inherits tool-wide exit codes and format defaults, so it omits both fields.
 
-- **D9: The introspection contract MUST be stable and versioned.** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. Adding optional introspection or output fields MAY keep `schema_version`; removing an introspection field or changing its type or meaning MUST increment it. Tool versions documented as compatible MUST preserve existing command paths, input meanings and defaults, exit code meanings, and structured output fields. An incompatible change MUST document its replacement and migration; changing `schema_version` alone is insufficient.
+A tool with one unnamed command has no command path, so its index carries the detail:
+
+```console
+$ hashfile schema
+```
+
+```json
+{
+  "schema_version": "1",
+  "tool_version": "1.0.0",
+  "global_flags": [
+    {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
+  ],
+  "format_defaults": {"tty": "text", "non_tty": "json"},
+  "exit_codes": {"0": "success", "1": "failure", "2": "usage error"},
+  "conformance": {"standard": "0.1.0-draft.3", "extensions": []},
+  "commands": [{"name": "", "description": "Hash a file", "effects": "read_only"}],
+  "command": {
+    "name": "",
+    "description": "Hash a file",
+    "args": [{"name": "file", "description": "File to hash", "type": "string", "required": true}],
+    "flags": [{"name": "algorithm", "description": "Digest algorithm", "type": "string", "required": false, "default": "sha256"}],
+    "effects": "read_only",
+    "confirm": false,
+    "interactive": false,
+    "output": {"type": "object", "required": ["digest"], "properties": {"digest": {"type": "string"}}}
+  }
+}
+```
+
+`hashfile README.md` runs the command. `hashfile schema README.md` is an unknown path under D6.
+
+- **D9: The introspection contract MUST be stable and versioned.** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. Adding an optional introspection or output field MAY keep `schema_version`. Adding a required introspection field, removing an introspection field, or changing its type or meaning MUST increment it. Tool versions documented as compatible MUST preserve existing command paths, input meanings and defaults, exit code meanings, and structured output fields. An incompatible change MUST document its replacement and migration; changing `schema_version` alone is insufficient.
 
 - **D10: Agent guidance MUST add context, not repeat the interface.** The tool MAY ship `SKILL.md` or `AGENTS.md` when domain knowledge or workflows need explanation. Guidance MUST point to commands and schema, and MUST NOT duplicate their catalogs.
 
@@ -537,7 +568,7 @@ Failures need a stable machine signal and enough information for the caller to c
   - Additional codes MUST each have one stable meaning. Fine-grained failures MUST use F3 `kind` instead.
   - D8 command `exit_codes` MUST appear only when they add a code or refine a tool-wide description without changing its meaning.
 
-- **F2: The schema index MUST declare one structured-error location.** D7 `errors` MUST equal `{"channel":"stderr","position":"last_line","format":"json"}`. When the tool exits with an error, the last non-empty stderr line MUST be one F3 JSON object. Human-readable diagnostics MAY precede it.
+- **F2: Structured errors MUST have one location.** When the tool exits with an error, the last non-empty stderr line MUST be one F3 JSON object. Human-readable diagnostics MAY precede it.
 
 - **F3: Structured errors MUST have a stable envelope.** The document MUST contain exactly one top-level field, `error`, whose value is an object. Its `kind` is the only stable match target; message text is not a stable interface.
 

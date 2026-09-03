@@ -29,10 +29,8 @@ The standard stays short. Text that neither states a requirement, nor resolves a
 
 Run these checks from the `haz-skills` repository root:
 
-- `git diff --check` detects whitespace errors.
-- `rg -n '—|[ \t]+$' cli-design/references/cli-design-standard.md` detects prose em dashes and trailing whitespace. No matches are expected.
-- `rg -n '^\|' cli-design/references/cli-design-standard.md` detects table rows that escaped their containing list. No matches are expected with the current layout.
+- `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, verifies unique requirement IDs, rejects unresolved references to requirement IDs, and rejects em dashes, trailing whitespace, and table rows outside a list item. It prints `file:line` for each problem and exits `1` when any check fails.
+- `git diff --check` detects whitespace errors in the change itself.
 - `pandoc -f gfm -t html cli-design/references/cli-design-standard.md -o /tmp/cli-design-standard.html` renders the document for inspection.
-- A short `uv run --no-project python` check parses every fenced `json` block, verifies unique requirement IDs, and rejects unresolved references to requirement IDs.
 
-Tests and build steps are N/A unless executable conformance tooling is added later.
+The script checks document invariants only. Conformance of a tool against the standard is not automated.

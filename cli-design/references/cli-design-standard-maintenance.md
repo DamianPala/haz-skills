@@ -13,6 +13,10 @@ A candidate requirement must satisfy P1-P6 before it enters the standard.
 - **P5: A requirement MUST use the weakest normative keyword that preserves its purpose.** Its strength and implementation cost MUST be proportionate to the consequence of non-conformance.
 - **P6: A requirement MUST be practical to implement, verify, and maintain throughout the tool's lifecycle.** A requirement that demands disproportionate engineering effort, predictably drifts out of conformance, or lacks a credible implementation path belongs in implementation guidance or MUST be rejected.
 
+## Document policy
+
+The standard stays short. Text that neither states a requirement, nor resolves an ambiguity in one, nor shows one working belongs elsewhere or nowhere.
+
 ## Change workflow
 
 1. Make the smallest change that resolves the caller-facing problem.

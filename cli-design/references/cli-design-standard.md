@@ -6,11 +6,18 @@
 
 ## Scope
 
-This document defines the contract for greenfield command-line tools and brownfield tools being adapted for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations.
+This document defines the contract for command-line tools, new or adapted, for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations.
 
 The standard is independent of the operating system, shell, implementation language, framework, and backend. Arguments, standard streams, environment variables, exit codes, and TTY refer to the equivalent process interfaces on each platform. Command examples use POSIX-like notation for readability and are non-normative.
 
-Brownfield tools and compatibility wrappers MAY preserve established behavior when changing it would break existing callers. A retained incompatible path MUST be documented and MUST NOT be presented as conforming. The tool MAY claim conformance only when it provides a documented conforming path for the same operation.
+A brownfield path MAY preserve established behavior when changing it would break existing callers. A retained incompatible path MUST be documented and MUST NOT be presented as conforming. The tool MAY claim conformance only when it provides a documented conforming path for the same operation.
+
+## Terms
+
+- **Greenfield, brownfield.** These words describe a command path, flag, or environment variable, not a tool. It is brownfield when it preserves a released contract and greenfield otherwise.
+- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the selected stdout format is human-readable, and in a non-interactive context otherwise. These terms govern prompts and consent; interactive sessions and pagers have their own conditions under I5.
+- **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
+- **Introspection command.** The arguments, excluding the program name, that return the D7 index. It is `schema` unless D6 requires another form.
 
 ## Conformance
 
@@ -36,9 +43,9 @@ A caller should be able to choose a command and construct a valid call without r
 
 - **D1: Published interfaces MUST match actual behavior.** Help, schema, documentation for the installed tool version, and shipped agent guidance MUST agree with the tool and with each other.
 
-- **D2: Discovery has three layers.** `--help` MUST provide the quick start, and `tool schema` MUST provide the exact contract. `SKILL.md` or `AGENTS.md` MAY add domain or workflow context when the first two layers are not enough.
+- **D2: Discovery has three layers.** `--help` MUST provide the quick start, and the introspection command MUST provide the exact contract. `SKILL.md` or `AGENTS.md` MAY add domain or workflow context when the first two layers are not enough.
 
-- **D3: Root `--help` MUST be a standalone cheat sheet.** It MUST state the tool's purpose, list its commands or groups, and point to `tool schema`. When any command returns success data beyond its exit status, root help MUST also point to `--json` under O2. It SHOULD show non-obvious common workflows as literal invocations. Each command MUST provide `--help` that states its purpose and usage and describes its arguments, command-specific flags, and applicable defaults. When the command list grows, help MUST group commands rather than omit them.
+- **D3: Root `--help` MUST be a standalone cheat sheet.** It MUST state the tool's purpose, list its commands or groups, and state the literal invocation of the introspection command. When any command returns success data beyond its exit status, root help MUST also point to `--json` under O2. It SHOULD show non-obvious common workflows as literal invocations. Each command MUST provide `--help` that states its purpose and usage and describes its arguments, command-specific flags, and applicable defaults. When the command list grows, help MUST group commands rather than omit them.
 
 - **D4: Speak the shared vocabulary.** Related commands MUST follow a predictable structure (`tool <noun> <verb>` or `tool <verb>`). For equivalent operations, greenfield commands SHOULD prefer `get`, `list`, `create`, and `delete` to `info`, `ls`, and `add`; managed-operation commands SHOULD use `status`, `wait`, and `cancel`, plus `pause` and `resume` for resumable suspension. A canonical flag name MUST keep the same meaning wherever it appears; aliases MAY remain for compatibility. Root `--version` MUST exist. Brownfield names MAY remain for compatibility.
 
@@ -59,11 +66,12 @@ A caller should be able to choose a command and construct a valid call without r
   }
   ```
 
-- **D6: `tool schema` MUST expose the command interface as JSON.**
+- **D6: The introspection command MUST expose the command interface as JSON.**
 
+  - Entry: the introspection command MUST be unambiguous from the arguments alone and MUST NOT dispatch to a retained domain operation. On greenfield paths, `schema` as the first argument MUST be reserved for introspection. When a retained contract already uses `schema` as its first argument, the tool MUST provide introspection in another form, such as a prefix (`tool contract schema`) or a flag (`tool --schema`).
   - Consistency: command paths, arguments, flags, and defaults exposed by schema MUST match the parser used at runtime. Shared definitions, generation, and conformance tests are all valid ways to enforce this.
-  - Execution: schema MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts.
-  - Routing: `tool schema` MUST return the D7 index, and a command path MUST return D8 detail. Each segment of a command path MUST be passed as a separate argument in the order shown by D7 `commands[].name`.
+  - Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts.
+  - Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return D8 detail. Each segment of a command path MUST be passed as a separate argument in the order shown by D7 `commands[].name`.
   - Errors: an unknown path MUST be a usage error and name the nearest valid paths.
 
 - **D7: The schema index MUST let callers choose a command safely.** It MUST contain the following fields.
@@ -77,7 +85,7 @@ A caller should be able to choose a command and construct a valid call without r
   | `format_defaults` | object | O2 default format for each output context. |
   | `exit_codes` | object | F1 tool-wide exit code meanings. |
   | `errors` | object | F2-F3 structured error contract. |
-  | `commands` | array | Sorted, flat routing list of every invocable command by full path; excludes `schema`. |
+  | `commands` | array | Sorted, flat routing list of every invocable command by full path; excludes the introspection command. |
 
   Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `description` MUST distinguish neighboring commands, and `effects` MUST follow R1. Command detail, not the index, MUST contain enough information to construct a call.
 
@@ -240,7 +248,7 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 - **I2: Configuration MUST be declared, deterministic, and inspectable.**
 
   - Sources: accepted configuration files and tool-specific environment variables MUST be documented, and an undeclared tool-specific variable MUST NOT change behavior. Greenfield variables SHOULD use a consistent `<TOOL>_<OPTION>` prefix, such as `MYTOOL_LOG_LEVEL`. If a flag selects a configuration file, the tool MUST document whether that file replaces or augments project and user configuration and where it sits in the precedence.
-  - Precedence: when more than one source provides a value, resolution MUST be deterministic and documented. Greenfield tools SHOULD use:
+  - Precedence: when more than one source provides a value, resolution MUST be deterministic and documented. Greenfield paths SHOULD resolve in this order:
 
     `flags > environment > project configuration > user configuration > built-in defaults`
 
@@ -257,13 +265,13 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
   $ mytool deploy service-a --manifest - < manifest.json
   ```
 
-- **I4: Secrets MUST NOT be passed as argument or flag values.** A command that needs a secret MUST provide a non-interactive source such as a credential store, file, stdin, or environment variable. Greenfield tools SHOULD use `--token-file PATH` for one secret and `--credentials-file PATH` for structured credentials; either flag SHOULD accept `-` for stdin. Secret sources and their precedence MUST be documented. A secret MUST NOT appear in help, schema, logs, errors, or normal output unless retrieval is the command's documented purpose.
+- **I4: Secrets MUST NOT be passed as argument or flag values.** A command that needs a secret MUST provide a source usable in a non-interactive context, such as a credential store, file, stdin, or environment variable. Greenfield commands SHOULD use `--token-file PATH` for one secret and `--credentials-file PATH` for structured credentials; either flag SHOULD accept `-` for stdin. Secret sources and their precedence MUST be documented. A secret MUST NOT appear in help, schema, logs, errors, or normal output unless retrieval is the command's documented purpose.
 
-- **I5: Non-interactive behavior MUST be explicit and fail safely.**
+- **I5: Behavior in a non-interactive context MUST be explicit and fail safely.**
 
-  - Prompts: a command MAY prompt only when stdin is a TTY and the selected stdout format is human-readable. Otherwise, it MUST NOT prompt. If required input or confirmation remains unresolved, it MUST fail with an error that names a flag, file, stdin form, or environment variable that can supply it. The absence of a permitted prompt MUST NOT be treated as consent.
+  - Prompts: a command MAY prompt only in an interactive context. Otherwise, it MUST NOT prompt. If required input or confirmation remains unresolved, it MUST fail with an error that names a flag, file, stdin form, or environment variable that can supply it. The absence of a permitted prompt MUST NOT be treated as consent.
   - Interactive sessions: a command MAY start an interactive session only when stdin and stdout are TTYs and the selected stdout format is human-readable. It MUST fail before side effects otherwise. A command that offers such a session MUST declare `interactive: true` in D8.
-  - Human action: a workflow MAY require an out-of-band human action. Its non-interactive entry point MUST be discoverable through D7 and D8. Work that continues after that command exits follows Stage M.
+  - Human action: a workflow MAY require an out-of-band human action. Its entry point MUST work in a non-interactive context and be discoverable through D7 and D8. Work that continues after that command exits follows Stage M.
   - Paging: a pager MAY start only when stdout is a TTY and the selected format is human-readable; see H3.
 
 - **I6: Invalid input MUST fail before side effects.** The tool MUST reject unknown flags, unsupported arguments, invalid values, and conflicting inputs as usage errors. `--` MUST end option parsing; later tokens MUST NOT be interpreted as flags. The tool MUST validate every locally checkable input before changing state. The error SHOULD identify the invalid input and show the accepted form or nearest valid name.
@@ -314,12 +322,12 @@ This stage covers calls that mutate state or may be repeated. Safeguards follow 
   |---|---|
   | `effects: "read_only"` | None |
   | Narrow, reversible mutation | None |
-  | Narrow, irreversible mutation | Explicit `--yes` in non-interactive use |
+  | Narrow, irreversible mutation | Explicit `--yes` in a non-interactive context |
   | Wide mutation | Explicit `--yes` and R4 preview |
 
   An M3 cancellation of exactly one managed operation by its M1 identifier does not require an additional confirmation. Any wider cancellation follows the table.
 
-- **R3: Safety gates MUST fail closed and be discoverable.** Every command that can require `--yes`, including those required by R2, MUST declare `confirm: true` in D8. Without `--yes`, a non-interactive call MUST stop before side effects and name the gate. `--yes` confirms a prompt; `--force` overrides a documented precondition. Accepting one MUST NOT enable the other.
+- **R3: Safety gates MUST fail closed and be discoverable.** Every command that can require `--yes`, including those required by R2, MUST declare `confirm: true` in D8. Without `--yes`, a call in a non-interactive context MUST stop before side effects and name the gate. `--yes` confirms a prompt; `--force` overrides a documented precondition. Accepting one MUST NOT enable the other.
 
 - **R4: Wide mutations MUST be previewable.** The command MUST provide `--dry-run`, which reports the planned targets and effects without changing state.
 
@@ -349,7 +357,7 @@ A caller should be able to select a representation before execution, parse stdou
   - Machine access: every command with D8 `output` MUST accept `--json`. If it also accepts `--format`, `--json` MUST produce the same output as `--format json` for documents and `--format ndjson` for streams.
   - Defaults: a greenfield command with D8 `output` SHOULD default to human-readable output on a TTY. On non-TTY stdout, structured data MUST default to JSON or NDJSON. A command whose primary result is a textual document rather than a set of fields or records MAY default to a declared native format such as text or Markdown. A brownfield command MAY retain an established non-TTY default when it is stable, parseable, and declared.
   - Precedence: an explicit format flag MUST override the detected default. Conflicting explicit format flags MUST be usage errors.
-  - Names: a greenfield tool MUST NOT define `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Formats use `--json` or `--format`.
+  - Names: a greenfield command MUST NOT accept `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Formats use `--json` or `--format`.
 
 - **O3: The output streams MUST have separate roles.**
 
@@ -564,7 +572,7 @@ A managed operation is work that continues after the command that started it exi
 
   When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD follow H1.
 
-- **M2: Managed work MUST expose status and wait.** The tool MUST provide non-interactive commands for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under M1; D4 covers their names.
+- **M2: Managed work MUST expose status and wait.** The tool MUST provide commands, usable in a non-interactive context, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under M1; D4 covers their names.
 
   - Both commands MUST declare `effects: read_only`.
   - The status command MUST report the current state without waiting for a terminal state.
@@ -575,7 +583,7 @@ A managed operation is work that continues after the command that started it exi
 
   Operation logs and events MAY supplement status and wait, but MUST NOT replace them.
 
-- **M3: Cancellation MUST be honest.** If a managed operation can be canceled, the tool MUST provide a non-interactive cancellation command whose name follows D4. It MUST accept the identifier returned under M1, declare `effects: idempotent`, and follow Stage R. Structured success MUST contain `status` and the identifier under the same field name; R5 supplies `changed`. Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
+- **M3: Cancellation MUST be honest.** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a non-interactive context, whose name follows D4. It MUST accept the identifier returned under M1, declare `effects: idempotent`, and follow Stage R. Structured success MUST contain `status` and the identifier under the same field name; R5 supplies `changed`. Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
 
   ```console
   $ mytool jobs status job_123 --json
@@ -588,13 +596,13 @@ A managed operation is work that continues after the command that started it exi
   {"job_id":"job_123","status":"canceled"}
   ```
 
-- **M4: Resumable suspension MUST remain distinct from cancellation.** If managed work can be suspended and later resumed from the same point, the tool MUST expose non-interactive suspension and resumption commands whose names follow D4. Both MUST accept the identifier returned under M1, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success. They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M3 remains terminal and MUST NOT mean suspension.
+- **M4: Resumable suspension MUST remain distinct from cancellation.** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a non-interactive context, whose names follow D4. Both MUST accept the identifier returned under M1, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success. They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M3 remains terminal and MUST NOT mean suspension.
 
 ## Stage H: Human interface
 
 A person at the terminal should find familiar flag names, standard environment behavior, and output that remains readable without color.
 
-- **H1: Greenfield flags MUST have canonical long names.** In a greenfield tool, flag names MUST use kebab-case and each concept MUST have one canonical long name. When the tool supports a concept below, it SHOULD use the listed long name. A listed alias MAY be added when it has no conflicting local meaning. Every accepted alias MUST behave exactly like its canonical flag and appear in the I1 descriptor.
+- **H1: Greenfield flags MUST have canonical long names.** A greenfield flag MUST use kebab-case, and each concept MUST have one canonical long name. When the tool supports a concept below, it SHOULD use the listed long name. A listed alias MAY be added when it has no conflicting local meaning. Every accepted alias MUST behave exactly like its canonical flag and appear in the I1 descriptor.
 
   | Concept | Long name | Common alias | Related rule |
   |---|---|---|---|

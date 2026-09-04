@@ -397,10 +397,10 @@ A caller should be able to select a representation before execution, parse stdou
 - **O2: Output format selection MUST be explicit and predictable.**
 
   - Declaration: D7 `format_defaults` MUST declare `tty` and `non_tty` format names. D8 `format_defaults` MUST appear only when a command differs from those tool-wide defaults.
-  - Machine access: every command with D8 `output` MUST accept `--json`. If it also accepts `--format`, `--json` MUST produce the same output as `--format json` for documents and `--format ndjson` for streams.
+  - Machine access: every command with D8 `output` MUST accept `--json`, and every other command SHOULD. On a command without `output`, `--json` selects the `json` format, and a success MUST write no bytes to stdout. If a command also accepts `--format`, `--json` MUST produce the same output as `--format json`, or as `--format ndjson` for a stream.
   - Defaults: a greenfield command with D8 `output` SHOULD default to human-readable output on a TTY. On non-TTY stdout, structured data MUST default to JSON or NDJSON. A command whose primary result is a textual document rather than a set of fields or records MAY default to a declared native format such as text or Markdown. A brownfield command MAY retain an established non-TTY default when it is stable, parseable, and declared.
   - Precedence: an explicit format flag MUST override the detected default. Conflicting explicit format flags MUST be usage errors.
-  - Names: a greenfield command MUST NOT accept `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Formats use `--json` or `--format`.
+  - Names: a greenfield command MUST NOT accept `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Under `--output-file`, the result goes to that file and a success writes no bytes to stdout. Formats use `--json` or `--format`.
 
 - **O3: The output streams MUST have separate roles.**
 
@@ -449,9 +449,9 @@ A caller should be able to select a representation before execution, parse stdou
 
 - **O5: JSON output MUST match its declared contract.**
 
-  - Document: unless D8 declares `stream: true`, a `--json` success MUST contain exactly one JSON value conforming to the D8 `output` schema, encoded as UTF-8 and followed by LF. A failed document call MUST NOT leave an incomplete or invalid JSON value on stdout.
+  - Document: unless D8 declares `stream: true`, a `--json` success of a command with `output` MUST contain exactly one JSON value conforming to that schema, encoded as UTF-8 and followed by LF. A failed document call MUST NOT leave an incomplete or invalid JSON value on stdout.
   - Values: values MUST keep their declared JSON types. Machine output MUST NOT silently truncate a value.
-  - Bounded values: a command that may cap a single inline value MUST declare a required boolean `truncated` and an optional string `output_file` in its D8 output schema. Every result MUST return `truncated`. When it is `true`, `output_file` MUST identify a caller-readable file containing the complete value, the inline value is a preview, and the file's retention MUST be documented. Collections and record streams MUST use O6 and O7 instead.
+  - Bounded values: a command that may cap a single inline value MUST declare a required boolean `truncated` and an optional string `output_file` in its D8 output schema. Every result MUST return `truncated`. When it is `true`, `output_file` MUST identify a file that holds the complete value; unless the caller selected that path, the file SHOULD NOT be accessible to other users. The inline value is a preview, and the file's retention MUST be documented. Collections and record streams MUST use O6 and O7 instead.
   - Time: timestamps MUST use RFC 3339 with an explicit offset. Numeric duration field names MUST state their unit.
 
   Matching output:
@@ -471,11 +471,11 @@ A caller should be able to select a representation before execution, parse stdou
   {
     "answer": "First part of the answer...",
     "truncated": true,
-    "output_file": "/tmp/mytool/results/job_123.md"
+    "output_file": "/home/user/.cache/mytool/results/job_123.md"
   }
   ```
 
-- **O6: Potentially unbounded document collections MUST be bounded.**
+- **O6: Potentially unbounded document collections MUST be bounded.** An R4 target list, in a preview or in the mutation's own result, is not a collection under this requirement; a command that caps it follows O5 Bounded values.
 
   - Window: a collection without a documented finite maximum MUST use a finite default limit and accept `--limit`. The tool MUST bound the number of items, not silently omit fields from individual items.
   - Shape: a bounded collection MUST be an object with an `items` array and a boolean `has_more` that is `true` exactly when matching items exist beyond those returned. A collection with a documented finite maximum MAY use a bare array. An empty collection MUST use the same shape with an empty array, not `null` or absent output.
@@ -607,7 +607,7 @@ Failures need a stable machine signal and enough information for the caller to c
   | `kind` | Meaning | Named by |
   |---|---|---|
   | `invalid_input` | The call is a usage error or exceeds an I7 bound. | I6 |
-  | `not_found` | A target identified by an argument or flag value does not exist in the state the tool manages or targets. | |
+  | `not_found` | A target identified by an argument or flag value does not exist in the state the tool manages or targets. | M2 |
   | `conflict` | Authoritative state conflicts with the requested change, such as a concurrent modification or a strict create whose target exists. | R5 |
   | `permission_denied` | The caller is identified and the action is forbidden. | |
   | `unauthenticated` | The caller could not be identified: credentials are missing, invalid, or expired. | |
@@ -639,7 +639,7 @@ Failures need a stable machine signal and enough information for the caller to c
   - After a failure, a command MUST NOT silently replace the requested target, source, or mode. It MUST fail through F2-F3 or identify the substitution in its declared structured result.
 
   ```json
-  {"error":{"kind":"outcome_unknown","message":"The deployment request timed out and its outcome could not be determined","retryable":false,"context":{"deployment":"dep_123"}}}
+  {"error":{"kind":"outcome_unknown","message":"The deployment request timed out and its outcome could not be determined","retryable":false,"context":{"deployment_id":"dep_123"}}}
   ```
 
 - **F5: User interruption MUST fail honestly.** A command that receives the platform's normal user-interrupt request MUST exit without a stack trace and fail through F2-F3 with `kind` `interrupted`, unless F4 requires `outcome_unknown`. Interrupting observation of managed work MUST NOT cancel or otherwise change that work.
@@ -648,16 +648,16 @@ Failures need a stable machine signal and enough information for the caller to c
 
 A managed operation is work that continues after the command that started it exits. A tool without such work has no Stage M requirements.
 
-- **M1: Accepted work MUST remain identifiable.** A command that exits before requested work finishes MUST return a non-empty canonical identifier in structured success output. Its field name is tool-defined but MUST remain consistent across the command that starts the work and every command that addresses it. Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and MUST NOT later resolve to a different entity. Its D5 breadcrumb SHOULD name the wait command.
+- **M1: Accepted work MUST remain identifiable.** A command that exits before requested work finishes MUST return a non-empty canonical identifier in structured success output. Its field name is tool-defined but MUST remain consistent across the command that starts the work and every command that addresses it. If the command that starts the work fails after obtaining the identifier, any F3 object it emits MUST carry the identifier in `context` under the same field name. Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and MUST NOT later resolve to a different entity. Its D5 breadcrumb SHOULD name the wait command.
 
-  When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD follow H1.
+  When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD follow H1. A command that waits for the work it started MUST fail through F2-F3 when that work does not succeed.
 
 - **M2: Managed work MUST expose status and wait.** The tool MUST provide commands, usable in a non-interactive context, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under M1; D4 covers their names.
 
   - Both commands MUST declare `effects: read_only`.
   - The status command MUST report the current state without waiting for a terminal state.
   - Structured results from both commands MUST contain `status` and the identifier under the same field name. The D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail through F2-F3 and MUST NOT return `unknown`.
-  - Any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail through F2-F3 and MUST NOT be reported as an operation state.
+  - Any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail through F2-F3 with `kind` `not_found` and MUST NOT be reported as an operation state.
   - The wait command MUST exit `0` when it successfully observes any terminal state. The operation outcome MUST be reported by `status` and MUST NOT change that exit code. Failure to observe the operation MUST fail through F2-F3.
   - The wait command MUST follow I8 and return immediately when the operation is already terminal. Timing out or terminating it MUST NOT cancel or otherwise change the operation, and MUST NOT be reported as a terminal operation outcome.
 
@@ -682,21 +682,32 @@ A managed operation is work that continues after the command that started it exi
 
 A person at the terminal should find familiar flag names, standard environment behavior, and output that remains readable without color.
 
-- **H1: Greenfield flags MUST have canonical long names.** A greenfield flag MUST use kebab-case, and each concept MUST have one canonical long name. When the tool supports a concept below, it SHOULD use the listed long name. A listed alias MAY be added when it has no conflicting local meaning. Every accepted alias MUST behave exactly like its canonical flag and appear in the I1 descriptor.
+- **H1: Greenfield flags MUST have canonical long names.** A greenfield flag MUST use kebab-case, and each concept MUST have one canonical long name. When the tool supports a concept below, it SHOULD use the listed long name; a requirement that names a flag keeps its own keyword. A listed alias MAY be added when it has no conflicting local meaning. Every accepted alias MUST behave exactly like its canonical flag and appear in the I1 descriptor.
 
   | Concept | Long name | Common alias | Related rule |
   |---|---|---|---|
   | Help | `--help` | `-h` | D3 |
   | Version | `--version` | `-V` | D4 |
-  | More diagnostics | `--verbose` | `-v` | O3 |
-  | Less diagnostics | `--quiet` | `-q` | O3 |
-  | Preview a mutation | `--dry-run` | `-n` | R4 |
-  | Override a named precondition | `--force` | `-f` | R3 |
-  | Confirm a prompt | `--yes` | `-y` | R3 |
   | Select a configuration file | `--config PATH` | `-c PATH` | I2 |
-  | Return after accepting managed work | `--background` | `--bg` | M1 |
+  | Supply one secret | `--token-file PATH` | No recommendation | I4 |
+  | Supply structured credentials | `--credentials-file PATH` | No recommendation | I4 |
   | Bound a wait | `--timeout DURATION` | No recommendation | I8, M2 |
+  | Override a documented precondition | `--force` | `-f` | R3 |
+  | Confirm a prompt | `--yes` | `-y` | R3 |
+  | Preview a mutation | `--dry-run` | `-n` | R4 |
+  | Keep a repeat from duplicating its effect | `--idempotency-key KEY` | No recommendation | R5 |
+  | Select JSON or NDJSON output | `--json` | No recommendation | O2 |
+  | Select a named format | `--format NAME` | No recommendation | O2 |
+  | Write the result to a path | `--output-file PATH` | `-o PATH` | O2 |
+  | More diagnostics | `--verbose` | `-v` | O3 |
+  | Less diagnostics | `--quiet` | `-q` | O3, F2 |
   | Bound returned items or records | `--limit N` | No recommendation | O6, O7 |
+  | Resume a collection | `--cursor CURSOR` | No recommendation | O6 (`continuation`) |
+  | Resume a stream after a record | `--after-cursor CURSOR` | No recommendation | O7 (`continuation`) |
+  | Keep reading new records | `--follow` | No recommendation | O7 |
+  | Return after accepting managed work | `--background` | `--bg` | M1 |
+  | Control color | `--color WHEN` | No recommendation | H4 |
+  | One item per line | `--plain` | No recommendation | H5 |
 
   `-n` follows the established no-op and dry-run convention. `-d` and `-l` are too overloaded to recommend for dry-run or limit.
 
@@ -704,7 +715,7 @@ A person at the terminal should find familiar flag names, standard environment b
 
 - **H3: External editors and pagers MUST respect user selection.** A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documented setting overrides them. A tool that starts a pager MUST honor `PAGER` unless a documented setting overrides it. I5 defines when an editor or pager may start.
 
-- **H4: Color MUST remain optional.** A tool that emits color MUST disable it when `NO_COLOR` is non-empty or the output stream is not a TTY, unless explicit color control overrides that default. Color MUST NOT be the only carrier of information. If provided, color flags MUST use `--color=always|never`; `--no-color` MAY be provided as `--color=never`.
+- **H4: Color MUST remain optional.** A tool that emits color MUST disable it when `NO_COLOR` is non-empty, `TERM` is `dumb`, or the output stream is not a TTY, unless a flag or a documented setting overrides that default on human-readable output. Color MUST NOT be the only carrier of information. If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`.
 
 - **H5: List-like commands with complete results SHOULD offer `--plain`.** A paginated command MAY offer it only for a page explicitly selected with `--limit` or, when the tool declares `continuation`, `--cursor`. `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
 

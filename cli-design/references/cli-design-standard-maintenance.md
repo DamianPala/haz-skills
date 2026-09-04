@@ -15,7 +15,7 @@ A candidate requirement must satisfy P1-P6 before it enters the standard.
 
 ## Document policy
 
-The standard stays short. Text that neither states a requirement, nor resolves an ambiguity in one, nor shows one working belongs elsewhere or nowhere.
+The standard stays short. Text that neither states a requirement, nor resolves an ambiguity in one, nor shows one working belongs elsewhere or nowhere. Design principles is the one non-normative section and stays short.
 
 ## Change workflow
 

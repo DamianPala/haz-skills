@@ -4,10 +4,10 @@
 Checks, per file:
 
 - every fenced ``json`` block parses;
-- requirement IDs (``**D1:`` and the like) are unique;
+- requirement IDs (``### D1:`` headings) are unique;
 - every reference to a requirement ID resolves to a defined one;
 - no em dash (U+2014), no trailing whitespace;
-- no table row at column zero (tables live inside list items).
+- no indented table row (tables live at column zero).
 
 Usage: ``uv run --no-project python cli-design/scripts/check-standard.py [FILE ...]``
 from the repository root. Without arguments it checks the standard itself.
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_FILE = Path("cli-design/references/cli-design-standard.md")
-ID_DEFINITION = re.compile(r"\*\*([A-Z][0-9]+):")
+ID_DEFINITION = re.compile(r"^### ([A-Z][0-9]+):")
 ID_TOKEN = re.compile(r"(?<![A-Za-z0-9+])([A-Z][0-9]+)(?![A-Za-z0-9])")
 FENCE = re.compile(r"^```(\w*)\s*$")
 
@@ -97,8 +97,8 @@ def check_lines(path: Path, lines: list[str]) -> list[str]:
             problems.append(f"{path}:{number}: em dash")
         if line != line.rstrip(" \t"):
             problems.append(f"{path}:{number}: trailing whitespace")
-        if line.startswith("|"):
-            problems.append(f"{path}:{number}: table row at column zero")
+        if line.lstrip(" ").startswith("|") and line.startswith(" "):
+            problems.append(f"{path}:{number}: indented table row")
     return problems
 
 

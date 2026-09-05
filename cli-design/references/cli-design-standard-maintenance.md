@@ -29,7 +29,7 @@ The standard stays short. Text that neither states a requirement, nor resolves a
 
 Run these checks from the `haz-skills` repository root:
 
-- `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, verifies unique requirement IDs, rejects unresolved references to requirement IDs, and rejects em dashes, trailing whitespace, and table rows outside a list item. It prints `file:line` for each problem and exits `1` when any check fails.
+- `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, reads requirement IDs from `### ID:` headings and verifies they are unique, rejects unresolved references to requirement IDs, and rejects em dashes, trailing whitespace, and indented table rows. It prints `file:line` for each problem and exits `1` when any check fails.
 - `git diff --check` detects whitespace errors in the change itself.
 - `pandoc -f gfm -t html cli-design/references/cli-design-standard.md -o /tmp/cli-design-standard.html` renders the document for inspection.
 

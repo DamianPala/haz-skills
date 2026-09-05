@@ -10,7 +10,7 @@ This document defines the contract for command-line tools, new or adapted, for r
 
 The standard is independent of the operating system, shell, implementation language, framework, and backend. Arguments, standard streams, environment variables, exit codes, and TTY refer to the equivalent process interfaces on each platform. Command examples use POSIX-like notation for readability and are non-normative.
 
-A brownfield path MAY preserve established behavior when changing it would break existing callers. A retained incompatible path MUST be documented and MUST NOT be presented as conforming. The tool MAY claim conformance only when it provides a documented conforming path for the same operation.
+A brownfield path MAY preserve established behavior when changing it would break existing callers. A retained incompatible path MUST be documented and MUST NOT be presented as conforming. A tool that retains such a path MAY claim conformance only when it also provides a documented conforming path for the same operation.
 
 ## Design principles
 
@@ -118,7 +118,7 @@ The same call under `--json` carries it as `next`:
 
 **D6c** Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts.
 
-**D6d** Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return D8 detail. A command path's segments are the parts of D7 `commands[].name` split on U+0020; each segment MUST be passed as a separate argument in that order. A tool with exactly one command and no command path MUST list that command with `name` `""` and include its D8 detail as D7 `command`; any argument after the introspection command is then an unknown path.
+**D6d** Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return D8 detail. A command path's segments are the parts of D7 `commands[].name` split on U+0020; each segment MUST be passed as a separate argument in that order. A tool with exactly one command and no command path MUST list that command with `name` `""` and include its D8 detail as D7 `command`. In that case, any argument after the introspection command is an unknown path.
 
 **D6e** Errors: an unknown path MUST be a usage error and name the nearest valid paths, if any.
 
@@ -296,7 +296,7 @@ $ hashfile schema
 
 ### D9: The introspection contract MUST be stable and versioned.
 
-**D9a** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. Adding an optional introspection or output field MAY keep `schema_version`. Adding a required introspection field, removing an introspection field, or changing its type or meaning MUST increment it.
+**D9a** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. A change that adds an optional introspection or output field MAY keep `schema_version` unchanged. A change that adds a required introspection field, removes an introspection field, or changes an introspection field's type or meaning MUST increment it.
 
 **D9b** Tool versions documented as compatible MUST preserve existing command paths, input meanings and defaults, exit code meanings, F3 `kind` meanings, and structured output fields. An incompatible change MUST document its replacement and migration; changing `schema_version` alone is insufficient.
 
@@ -419,7 +419,7 @@ $ cat 20-mib.bin | mytool upload - --json
 
 ### I8: External work MUST be bounded or explicitly unbounded.
 
-**I8a** Connection establishment and non-streaming network operations MUST use finite default timeouts. A command that waits for external state without waiting being its documented purpose MUST use a finite default deadline. A wait for a human action follows I5.
+**I8a** Connection establishment and non-streaming network operations MUST use finite default timeouts. A command that waits for external state, when waiting is not its documented purpose, MUST use a finite default deadline. A wait for a human action follows I5.
 
 **I8b** A command whose documented purpose is to wait, watch, follow, or run external work to completion MAY be unbounded by default, but MUST accept `--timeout` and declare that default. `--timeout` MUST accept an integer immediately followed by `s`, `m`, or `h` and MAY accept other forms, such as a bare integer with a documented unit.
 
@@ -446,7 +446,7 @@ This stage covers calls that mutate state or may be repeated. Safeguards follow 
 | `idempotent` | The command may change intended state, but repeating a successful call with the same inputs MUST succeed without another intended state transition. |
 | `non_idempotent` | The command meets neither preceding guarantee; a repeat may cause another intended effect or return a stable conflict. |
 
-**R1b** The declaration MUST cover every valid invocation. Use `non_idempotent` if any invocation lacks the repeat guarantee; otherwise use `idempotent` if any invocation can change intended state, and `read_only` otherwise. A changing response, incidental telemetry, logs, caches, metering, or rate limiting do not alone change the classification.
+**R1b** The declaration MUST cover every valid invocation. Declare `non_idempotent` when any invocation lacks the repeat guarantee. Otherwise declare `idempotent` when any invocation can change intended state. Otherwise declare `read_only`. A changing response, incidental telemetry, logs, caches, metering, or rate limiting do not alone change the classification.
 
 For example, a delete by stable identifier whose repeat succeeds with `changed: false` is `idempotent`; a delete whose repeat fails with `not_found`, or whose targets are resolved at run time and may differ on a later repeat, such as the newest item or every stale item, is `non_idempotent`.
 
@@ -526,7 +526,7 @@ The TTY state of stdin is one input to the I5 prompt policy, stdout controls the
 
 **O2a** Declaration: D7 `format_defaults` MUST declare `tty` and `non_tty` format names. D8 `format_defaults` MUST appear only when a command differs from those tool-wide defaults.
 
-**O2b** Machine access: every command with D8 `output` MUST accept `--json`, and every other command SHOULD. On a command without `output`, `--json` selects the `json` format, and a success MUST write no bytes to stdout. If a command also accepts `--format`, `--json` MUST produce the same output as `--format json`, or as `--format ndjson` for a stream.
+**O2b** Machine access: every command with D8 `output` MUST accept `--json`, and every other command SHOULD. On a command without `output`, `--json` selects the `json` format, and a success MUST write no bytes to stdout. If a command also accepts `--format`, `--json` MUST produce the same output as `--format json` or, when D8 declares `stream: true`, as `--format ndjson`.
 
 **O2c** Defaults: a greenfield command with D8 `output` SHOULD default to human-readable output on a TTY. On non-TTY stdout, structured data MUST default to JSON or NDJSON. A command whose primary result is a textual document rather than a set of fields or records MAY default to a declared native format such as text or Markdown. A brownfield command MAY retain an established non-TTY default when it is stable, parseable, and declared.
 
@@ -652,7 +652,7 @@ This requirement applies to a command with D8 `stream: true`.
 
 **O7d** Following: a follow mode MAY exist, SHOULD be named `--follow`, and MUST require explicit selection under I8. Without an explicit `--limit`, it is unbounded.
 
-**O7e** Completion: exit `0` means the requested read ended successfully, not that the record source is exhausted; empty stdout is valid. After a non-zero exit, prior LF-terminated records remain valid and an unterminated final fragment is not a record. This standard defines no end record; EOF and the exit status are authoritative.
+**O7e** Completion: exit `0` means the requested read ended successfully, not that the record source is exhausted; empty stdout is valid. After a non-zero exit, prior LF-terminated records remain valid. An unterminated final fragment is not a record. This standard defines no end record; EOF and the exit status are authoritative.
 
 **O7f** Under the `continuation` extension: `output` MUST be an object schema with `cursor` as a required string property, and each `cursor` MUST be a non-empty opaque string. The command MUST accept `--after-cursor` and resume strictly after that record without skipping any matching record in the same logical stream. Inputs selecting the source, filters, or order MUST remain the same; limits, following, timeouts, and output format MAY change. If this continuation cannot be guaranteed because the cursor or required history is invalid, expired, or incompatible, the command MUST fail with non-zero exit and F3 `kind` `cursor_unavailable`; it MUST NOT silently resume elsewhere.
 
@@ -725,7 +725,7 @@ Failures need a stable machine signal and enough information for the caller to c
 
 ### F2: Structured errors MUST have one location.
 
-When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object. When the selected stdout format is machine-readable or stderr is not a TTY, the last non-empty stderr line MUST be that object, including under `--quiet`; otherwise the object MAY be omitted. Whenever the object is emitted, it MUST be the last non-empty stderr line, and a requirement that names an F3 `kind` applies to it.
+When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object. The tool MUST emit that object when the selected stdout format is machine-readable or stderr is not a TTY, including under `--quiet`; otherwise the object MAY be omitted. Whenever the object is emitted, it MUST be the last non-empty stderr line, and a requirement that names an F3 `kind` applies to it.
 
 The same failure with `--json` and at a terminal:
 
@@ -753,7 +753,7 @@ Run: mytool images list web
 
 **F3b** `retryable` is `true` only when the same invocation may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess.
 
-**F3c** A tool MUST NOT use a `kind` listed below with another meaning and SHOULD use it when its definition applies; a requirement that names a `kind` keeps its own keyword. Any other `kind` is tool-defined. A released `kind` whose meaning conflicts with the table is brownfield: the tool MAY retain it and MUST document it as not conforming.
+**F3c** A tool MUST NOT use a `kind` listed below with another meaning. It SHOULD use a listed `kind` when its definition applies. A requirement that names a `kind` keeps its own keyword. Any other `kind` is tool-defined. A released `kind` whose meaning conflicts with the table is brownfield: the tool MAY retain it and MUST document it as not conforming.
 
 | `kind` | Meaning | Named by |
 |---|---|---|
@@ -913,7 +913,7 @@ I5 defines when an editor or pager may start.
 
 ### H4: Color MUST remain optional.
 
-**H4a** A tool that emits color MUST disable it when `NO_COLOR` is non-empty, `TERM` is `dumb`, or the output stream is not a TTY, unless a flag or a documented setting overrides that default on human-readable output. Color MUST NOT be the only carrier of information.
+**H4a** A tool that emits color MUST disable it when `NO_COLOR` is non-empty, `TERM` is `dumb`, or the output stream is not a TTY. A flag or a documented setting overrides that default on human-readable output only. Color MUST NOT be the only carrier of information.
 
 **H4b** If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`.
 

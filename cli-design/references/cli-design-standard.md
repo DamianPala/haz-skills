@@ -1,16 +1,14 @@
 # CLI Design Standard for Humans and Agents
 
-> **Version:** 0.1.0-draft.3
->
-> **Status:** Working draft. This document is not yet a conformance target.
+**Version:** 0.1.0-draft.3
+
+**Status:** Working draft. This document is not yet a conformance target.
 
 ## Scope
 
 This document defines the contract for command-line tools, new or adapted, for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations.
 
 The standard is independent of the operating system, shell, implementation language, framework, and backend. Arguments, standard streams, environment variables, exit codes, and TTY refer to the equivalent process interfaces on each platform. Command examples use POSIX-like notation for readability and are non-normative.
-
-A brownfield path MAY preserve established behavior when changing it would break existing callers. A retained incompatible path MUST be documented and MUST NOT be presented as conforming. A tool that retains such a path MAY claim conformance only when it also provides a documented conforming path for the same operation.
 
 ## Design principles
 
@@ -40,6 +38,8 @@ This section is non-normative. It records the decisions that shape the standard.
 A conforming tool MUST satisfy every applicable core requirement in this standard. A conditional requirement applies only when its stated condition is true.
 
 A conformance claim is the D7 `conformance` field. It MUST identify this document's version and every extension the tool claims. This version defines one extension, `continuation`. A tool MAY claim it only if every clause under that name is satisfied by every command on every conforming path.
+
+A brownfield path MAY preserve established behavior when changing it would break existing callers. A retained incompatible path MUST be documented and MUST NOT be presented as conforming. A tool that retains such a path MAY claim conformance only when it also provides a documented conforming path for the same operation.
 
 Tests and conformance tools can verify these requirements, but this document remains authoritative if they disagree.
 

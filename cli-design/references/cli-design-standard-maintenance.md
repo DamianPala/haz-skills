@@ -17,6 +17,8 @@ A candidate requirement must satisfy P1-P6 before it enters the standard.
 
 The standard stays short. Text that neither states a requirement, nor resolves an ambiguity in one, nor shows one working belongs elsewhere or nowhere. Design principles is the one non-normative section and stays short.
 
+Requirement and clause identifiers are scoped to a version of this document: after inserting, splitting, or removing a clause, later clauses are relettered in reading order and internal references are updated; an external citation names the version.
+
 ## Change workflow
 
 1. Make the smallest change that resolves the caller-facing problem.
@@ -29,7 +31,7 @@ The standard stays short. Text that neither states a requirement, nor resolves a
 
 Run these checks from the `haz-skills` repository root:
 
-- `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, reads requirement IDs from `### ID:` headings and verifies they are unique, rejects unresolved references to requirement IDs, and rejects em dashes, trailing whitespace, and indented table rows. It prints `file:line` for each problem and exits `1` when any check fails.
+- `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, reads requirement IDs from `### ID:` headings and verifies they are unique and in stage order, reads clause markers (`**R3c**` at the start of a paragraph) and verifies they belong to the enclosing requirement and run without gaps, rejects unresolved references to requirement or clause IDs, verifies that every `"standard"` value in examples equals the version in the header, and rejects em dashes, trailing whitespace, and indented table rows. It prints `file:line` for each problem and exits `1` when any check fails.
 - `git diff --check` detects whitespace errors in the change itself.
 - `pandoc -f gfm -t html cli-design/references/cli-design-standard.md -o /tmp/cli-design-standard.html` renders the document for inspection.
 

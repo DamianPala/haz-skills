@@ -18,7 +18,7 @@ This section is non-normative. It records the decisions that shape the standard.
 - **A testable contract.** Each requirement has an observable pass or fail. A preference without a test belongs in guidance.
 - **An introspection command, not `--help --json`.** D7 and D8 form a versioned contract (D9), fetched without credentials, configuration, or network (D6), and carry `effects`, `confirm`, and an output schema. Help output is a rendering for people and stays free to change.
 - **Context from the stdin TTY, the selected stdout format, and `NO_INPUT`.** Terms define the interactive context once. A caller forces the non-interactive context with `--json`, by withholding a TTY on stdin, or with `NO_INPUT` when it cannot change either. Each signal can only force the non-interactive context, so none can contradict a TTY; a tool-defined signal for the same context would let two signals disagree.
-- **Conditional requirements and one extension, no profiles.** Applicability is stated per requirement: Stage R when a command mutates, Stage M when work outlives the command that started it, O6 when a collection has no documented finite maximum. `continuation` is the only extension because resumable pagination is a guarantee a tool cannot provide by accident.
+- **Conditional requirements and named extensions, no profiles.** Applicability is stated per requirement: Stage R when a command mutates, R7 when work outlives the command that started it, O6 when a collection has no documented finite maximum. An extension names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on: resumable pagination (`continuation`), observable accepted work with controls where cancellation or suspension exists (`managed`). A profile would bundle requirements across stages; an extension is one capability.
 - **`--json`, not `--output`.** `--json` is one flag a caller can pass without knowing the tool's format names. `--output` means a file path in some tools and a format in others, so a caller who sees it cannot tell which.
 - **An open table of error kinds.** Names in the F3 error table keep their meanings everywhere; any other `kind` is tool-defined and unprefixed. A caller acts on the names it knows either way, and a prefix would only cost the tool.
 
@@ -30,14 +30,14 @@ This section is non-normative. It records the decisions that shape the standard.
 - **Introspection command.** The arguments, excluding the program name, that return the D7 index. It is `schema` unless another form is required under D6a.
 - **Caller.** The person or program that runs the tool and consumes its output.
 - **Managed operation.** Work that continues after the command that started it exits.
-- **Core requirement.** A normative statement not labeled with an extension name, including an unlabeled clause within a requirement that also contains extension clauses.
-- **Extension.** A named set of clauses labeled with that name. An extension is an optional guarantee that a tool enables by declaring it in D7.
+- **Core requirement.** A normative statement in a section before Extensions.
+- **Extension.** A named section under Extensions. An extension is an optional guarantee that a tool enables by declaring its name in D7; its requirements bind only a tool that declares it.
 
 ## Conformance
 
 A conforming tool MUST satisfy every applicable core requirement in this standard. A conditional requirement applies only when its stated condition is true.
 
-A conformance claim is the D7 `conformance` field. It MUST identify this document's version and every extension the tool claims. This version defines one extension, `continuation`. A tool MAY claim it only if every applicable clause under that name is satisfied on every conforming path.
+A conformance claim is the D7 `conformance` field. It MUST identify this document's version and every extension the tool claims. This version defines two extensions under Extensions, `continuation` and `managed`. A tool MAY claim an extension only if every applicable requirement in its section is satisfied on every command the claim covers.
 
 A brownfield path MAY preserve established behavior when changing it would break existing callers. A retained incompatible command MUST carry `conforming: false` in its D7 entry, and its retained behavior MUST be documented. The claim covers every command not so marked. A tool that retains such a command SHOULD also provide a documented conforming path for the same operation.
 
@@ -375,7 +375,7 @@ With `--token-file token.txt` under `--verbose`, a diagnostic may name the sourc
 
 **I5b** Interactive sessions: a command MAY start an interactive session only when stdin and stdout are TTYs and the selected stdout format is human-readable; otherwise it MUST fail before side effects. A command that offers such a session MUST declare `interactive: true` in D8. Starting an external editor is an interactive session.
 
-**I5c** Human action: a workflow MAY require an out-of-band human action. Its entry point MUST work in a non-interactive context and be discoverable through D7 and D8. Work that continues after that command exits falls under Stage M. In a non-interactive context, a command MUST NOT wait for a human action outside the call, such as a browser or device approval, unless that wait is the command's documented purpose; it MUST instead fail before side effects and name the entry point or I4 source that resolves it.
+**I5c** Human action: a workflow MAY require an out-of-band human action. Its entry point MUST work in a non-interactive context and be discoverable through D7 and D8. Work that continues after that command exits falls under R7 and, where claimed, the `managed` extension. In a non-interactive context, a command MUST NOT wait for a human action outside the call, such as a browser or device approval, unless that wait is the command's documented purpose; it MUST instead fail before side effects and name the entry point or I4 source that resolves it.
 
 **I5d** Paging: a pager MAY start only when stdout is a TTY and the selected stdout format is human-readable; see H3.
 
@@ -436,7 +436,7 @@ The `--timeout` descriptor of a wait that is unbounded by default carries no `de
 
 ## Stage R: Repeatability and mutation safety
 
-This stage covers calls that mutate state or may be repeated. Safeguards follow the possible damage, not merely whether a command changes state. A tool whose every command declares `effects: read_only` has no mutation requirements under R2-R5. R6 applies when the tool retries requests internally.
+This stage covers calls that mutate state or may be repeated. Safeguards follow the possible damage, not merely whether a command changes state. A tool whose every command declares `effects: read_only` has no mutation requirements under R2-R5. R6 applies when the tool retries requests internally, and R7 when a command exits before the work it requested finishes.
 
 ### R1: Effect metadata MUST be conservative.
 
@@ -465,7 +465,7 @@ For example, a delete by stable identifier whose repeat succeeds with `changed: 
 | Narrow, irreversible mutation | Confirmation under R3b |
 | Wide mutation | Confirmation under R3b, and `--dry-run` under R4 |
 
-**R2c** An M3 cancellation of exactly one managed operation by its M1 identifier does not require an additional confirmation. Any wider cancellation follows the table.
+**R2c** An M2 cancellation of exactly one managed operation by its R7 identifier does not require an additional confirmation. Any wider cancellation follows the table.
 
 ### R3: Safety gates MUST fail closed and be discoverable.
 
@@ -522,6 +522,26 @@ For example, an idempotent create-or-get may return `changed: true` and then `ch
 ### R6: Built-in retries MUST be safe and bounded.
 
 A tool that retries requests internally MUST retry only failures that would be reported with `retryable: true` under F3b, and only for `read_only` or `idempotent` commands, or requests protected by an idempotency key. It MUST preserve the original inputs, limit the number of attempts, and remain within the I8 timeout. It SHOULD honor `Retry-After` when the timeout allows.
+
+### R7: Accepted work MUST remain identifiable.
+
+**R7a** A command that exits before requested work finishes MUST return a non-empty canonical identifier in structured success output. Its field name is tool-defined but MUST remain consistent across the command that starts the work and every command that addresses it. If the command that starts the work fails after obtaining the identifier, any F3 object it emits MUST carry the identifier in `context` under the same field name.
+
+**R7b** Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and MUST NOT later resolve to a different entity. The tool SHOULD document how a caller observes the work, and when a wait command exists, the identifier's D5 breadcrumb SHOULD name it.
+
+**R7c** When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD take its name from H1b. The D8 `description` of a command that starts managed work MUST state whether it waits for completion by default. A command that waits for the work it started MUST fail with `kind` `operation_failed` when that work does not succeed. If its deadline passes after the work was accepted, it MUST fail with `kind` `outcome_unknown` and carry the identifier under R7a.
+
+Observing and controlling accepted work falls under the `managed` extension (M1-M3).
+
+A `deploy` that waits for its deployment, and the wait command of a tool that declares `managed` observing the same terminal state under M1, both fail on stderr with `operation_failed` and carry the identifier:
+
+```console
+$ mytool deploy api --env prod --yes --json
+{"error":{"kind":"operation_failed","message":"Deployment dep_123 failed: image pull error","context":{"deployment_id":"dep_123","status":"failed"}}}
+
+$ mytool deployments wait dep_123 --json
+{"error":{"kind":"operation_failed","message":"Deployment dep_123 failed","context":{"deployment_id":"dep_123","status":"failed"}}}
+```
 
 ## Stage O: Output
 
@@ -630,9 +650,9 @@ A bounded single value may instead report:
 
 **O6c** Shape: a bounded collection MUST be an object with an `items` array and a boolean `has_more` that is `true` exactly when matching items exist beyond those returned. A collection with a documented finite maximum MAY use a bare array. An empty collection MUST use the same shape with an empty array, not `null` or absent output.
 
-**O6d** Under the `continuation` extension: the command MUST accept `--cursor`, and each JSON page MUST contain `next_cursor`, an opaque string that the caller passes unchanged to `--cursor`, or `null` on the final page. `has_more` MUST be `true` if and only if `next_cursor` is not `null`. Source, filters, and order MUST remain unchanged when using `--cursor`; the limit and output format MAY change. If the cursor is invalid, expired, incompatible, or cannot continue the same result set, the command MUST fail with `kind` `cursor_unavailable`. It MUST NOT silently restart from another position. Pagination MUST use a stable, documented order and document whether pages read live state or one fixed snapshot.
+Resuming a collection beyond one page falls under the `continuation` extension (C1).
 
-A page from a tool that declares `continuation`:
+A page whose collection has more items:
 
 ```console
 $ mytool jobs list --limit 2 --json
@@ -644,8 +664,7 @@ $ mytool jobs list --limit 2 --json
     {"id": "job_123", "status": "running"},
     {"id": "job_456", "status": "queued"}
   ],
-  "has_more": true,
-  "next_cursor": "cur_abc123"
+  "has_more": true
 }
 ```
 
@@ -663,9 +682,223 @@ This requirement applies to a command with D8 `stream: true`.
 
 **O7e** Completion: exit `0` means the requested read ended successfully, not that the record source is exhausted; empty stdout is valid. After a non-zero exit, prior LF-terminated records remain valid. An unterminated final fragment is not a record. This standard defines no end record; EOF and the exit status are authoritative.
 
-**O7f** Under the `continuation` extension: `output` MUST be an object schema with `cursor` as a required string property, and each `cursor` MUST be a non-empty opaque string. The command MUST accept `--after-cursor` and resume strictly after that record without skipping any matching record in the same logical stream. Inputs selecting the source, filters, or order MUST remain the same; limits, following, timeouts, and output format MAY change. If this continuation cannot be guaranteed because the cursor or required history is invalid, expired, or incompatible, the command MUST fail with `kind` `cursor_unavailable`; it MUST NOT silently resume elsewhere.
+Resuming a stream after a record falls under the `continuation` extension (C2).
 
-Example command schema excerpt for a tool that declares `continuation`:
+A bounded read of two records:
+
+```console
+$ mytool logs job_123 --limit 2 --json
+{"timestamp":"2026-08-15T10:00:00Z","level":"info","message":"Started"}
+{"timestamp":"2026-08-15T10:00:01Z","level":"info","message":"Fetching input"}
+```
+
+### O8: Output MUST survive normal pipeline closure.
+
+When a downstream reader closes a pipe, a command that has not otherwise failed MUST stop writing and emit no stack trace or broken-pipe diagnostic. Its exit status MAY follow the platform's pipe-closure convention; any non-zero meaning MUST be documented under F1c.
+
+## Stage F: Failure
+
+Failures need a stable machine signal and enough information for the caller to choose its next action. Success must not hide incomplete or uncertain work.
+
+### F1: Exit codes MUST be stable and documented.
+
+**F1a** Unless a released contract assigns another meaning to `1` or `2`, tool-wide D7 `exit_codes` MUST contain the decimal-string keys in the table below with these meanings. A tool that retains such a released meaning MUST document, in `exit_codes`, the code it uses for each meaning in the table.
+
+| Code | Meaning |
+|---|---|
+| `0` | Success, including an empty result or no differences. |
+| `1` | Generic failure. |
+| `2` | Usage error. |
+
+**F1b** Exit `0` MUST mean the command observed its documented postcondition through the interface it used. Independent re-verification is not required. For a command that returns after acceptance, acceptance falls under R7; completion falls under R7c when the initiating command waits and, under `managed`, under M1.
+
+**F1c** Additional codes MUST each have one stable meaning. Fine-grained failures MUST use F3 `kind` instead.
+
+**F1d** D8 command `exit_codes` MUST appear only when they add a code or refine a tool-wide description without changing its meaning.
+
+### F2: Structured errors MUST have one location.
+
+To fail with a `kind` is to exit non-zero and, wherever this requirement demands the object, emit an F3 object with that `kind`; other requirements cite this definition. When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object. The tool MUST emit that object when the selected stdout format is machine-readable or stderr is not a TTY, including under `--quiet`; otherwise the object MAY be omitted. Whenever the object is emitted, it MUST be the last non-empty stderr line, and a requirement that names an F3 `kind` applies to it. The object MUST NOT be written to stdout.
+
+The same failure with `--json`, as an F3 object on stderr, and at a terminal:
+
+```console
+$ mytool deploy api --env prod --yes --json
+{"error":{"kind":"image_not_found","message":"Cannot deploy 'api': image 'web:v2.1.0' was not found","hint":"Run mytool images list web"}}
+
+$ mytool deploy api --env prod --yes
+Error: Cannot deploy 'api': image 'web:v2.1.0' was not found
+Run: mytool images list web
+```
+
+### F3: Structured errors MUST have a stable envelope.
+
+**F3a** The document MUST contain exactly one top-level field, `error`, whose value is an object with the fields in the table below. Its `kind` is the only stable match target; message text is not a stable interface.
+
+| Field | Presence | Contract |
+|---|---|---|
+| `kind` | MUST | String with stable machine meaning; the values in the `kind` table below have shared meanings. |
+| `message` | MUST | String identifying the failed operation and cause. |
+| `retryable` | MAY | Boolean; see F3b. |
+| `action` | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
+| `hint` | SHOULD | String recovery step; see F3b. |
+| `context` | MAY | Object containing machine-readable values needed for recovery. |
+
+**F3b** `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess.
+
+**F3c** A tool MUST NOT use a `kind` listed below with another meaning. It SHOULD use a listed `kind` when its definition applies. A requirement that names a `kind` keeps its own keyword. Any other `kind` is tool-defined. A released `kind` whose meaning conflicts with the table is brownfield: the tool MAY retain it and MUST document it as not conforming.
+
+| `kind` | Meaning | Named by |
+|---|---|---|
+| `invalid_input` | The call is a usage error or exceeds an I7 bound. | I6 |
+| `not_found` | A target identified by an argument or flag value does not exist in the state the tool manages or targets. | M1 |
+| `conflict` | Authoritative state conflicts with the requested change, such as a concurrent modification or a strict create whose target exists. | R5 |
+| `permission_denied` | The caller is identified and the action is forbidden. | |
+| `unauthenticated` | The caller could not be identified: credentials are missing, invalid, or expired. | |
+| `timeout` | The command's own I8 deadline passed, and any intended effect is known not to have happened. | |
+| `unavailable` | A dependency rejected or failed the request transiently, including rate limiting. | |
+| `outcome_unknown` | The intended effect may have happened and was not observed. | F4 |
+| `interrupted` | The user interrupted the command and F4 does not apply. | F5 |
+| `cursor_unavailable` | The cursor is invalid, expired, or incompatible, or required history is missing. | O6, O7 |
+| `confirmation_required` | R3 stopped the call before its gated effect. | R3 |
+| `operation_failed` | A managed operation reached a terminal state other than `succeeded`; `context` carries the identifier and `status`. | R7, M1 |
+| `precondition_failed` | A documented precondition that `--force` overrides is not met. | |
+
+A complete error object with every field:
+
+```json
+{
+  "error": {
+    "kind": "image_not_found",
+    "message": "Cannot deploy 'web-api': image 'web:v2.1.0' was not found",
+    "retryable": false,
+    "action": "agent",
+    "hint": "Run mytool images list web",
+    "context": {"service": "web-api", "image": "web:v2.1.0"}
+  }
+}
+```
+
+### F4: Fallbacks and uncertain outcomes MUST be explicit.
+
+**F4a** If a failed command may have caused an intended effect and did not observe the outcome, it MUST use F3 `kind` `outcome_unknown` and MUST NOT report completion or absence. Known completed effects SHOULD be listed in `context` under `completed`, an array of the affected targets as the caller named them. Which prior stdout remains valid falls under O5a and O7e.
+
+**F4b** If usable partial results survive a failure, the structured error SHOULD identify them in `context`.
+
+**F4c** After a failure, a command MUST NOT silently replace the requested target, source, or mode. It MUST fail with a `kind` or identify the substitution in its declared structured result.
+
+A timed-out request whose effect was not observed:
+
+```json
+{"error":{"kind":"outcome_unknown","message":"The deployment request timed out and its outcome could not be determined","retryable":false,"context":{"deployment_id":"dep_123"}}}
+```
+
+### F5: User interruption MUST fail honestly.
+
+A command that receives the platform's normal user-interrupt request MUST exit without a stack trace and fail with `kind` `interrupted`, unless F4 requires `outcome_unknown`. Interrupting observation of managed work MUST NOT cancel or otherwise change that work.
+
+## Stage H: Human interface
+
+A person at the terminal should find familiar flag names, standard environment behavior, and output that remains readable without color.
+
+### H1: Greenfield flags MUST have canonical long names.
+
+**H1a** A greenfield flag MUST use kebab-case, and each concept MUST have one canonical long name.
+
+**H1b** When the tool supports a concept in the table below, it SHOULD use the listed long name; a requirement that names a flag keeps its own keyword. A listed alias MAY be added when it has no conflicting local meaning. Every accepted alias MUST behave exactly like its canonical flag and appear in the I1 descriptor.
+
+| Concept | Long name | Common alias | Related rule |
+|---|---|---|---|
+| Help | `--help` | `-h` | D3 |
+| Version | `--version` | `-V` | D4 |
+| Select a configuration file | `--config PATH` | `-c PATH` | I2 |
+| Supply one secret | `--token-file PATH` | No recommendation | I4 |
+| Supply structured credentials | `--credentials-file PATH` | No recommendation | I4 |
+| Bound a wait | `--timeout DURATION` | No recommendation | I8, M1 |
+| Override a documented precondition | `--force` | `-f` | R3 |
+| Confirm a prompt | `--yes` | `-y` | R3 |
+| Preview a mutation | `--dry-run` | `-n` | R4 |
+| Keep a repeat from duplicating its effect | `--idempotency-key KEY` | No recommendation | R5 |
+| Select JSON or NDJSON output | `--json` | No recommendation | O2 |
+| Select a named format | `--format NAME` | No recommendation | O2 |
+| Write the result to a path | `--output-file PATH` | No recommendation | O2 |
+| More diagnostics | `--verbose` | `-v` | O3 |
+| Less diagnostics | `--quiet` | `-q` | O3, F2 |
+| Bound returned items or records | `--limit N` | No recommendation | O6, O7 |
+| Resume a collection | `--cursor CURSOR` | No recommendation | C1 |
+| Resume a stream after a record | `--after-cursor CURSOR` | No recommendation | C2 |
+| Keep reading new records | `--follow` | No recommendation | O7 |
+| Return after accepting managed work | `--background` | `--bg` | R7 |
+| Control color | `--color WHEN` | No recommendation | H4 |
+| One item per line | `--plain` | No recommendation | H5 |
+
+### H2: Tools with nested commands SHOULD provide shell completions.
+
+When provided, static command, flag, and alias candidates MUST match the installed interface.
+
+### H3: External editors and pagers MUST respect user selection.
+
+A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documented setting overrides them. A tool that starts a pager MUST honor `PAGER` unless a documented setting overrides it.
+
+When an editor or pager may start falls under I5b and I5d.
+
+### H4: Color MUST remain optional.
+
+**H4a** A tool that emits color MUST disable it when `NO_COLOR` is non-empty, `TERM` is `dumb`, or the output stream is not a TTY. A flag or a documented setting overrides that default on human-readable output only. Color MUST NOT be the only carrier of information.
+
+**H4b** If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`. `--color always` has no effect on `--plain` output.
+
+At a terminal, `NO_COLOR=1 mytool services list` and `TERM=dumb mytool services list` print no color. In a pipe, `mytool services list --format text --color always | less -R` keeps color because the output is human-readable, while `mytool services list --color always | jq .` emits none because stdout is then machine-readable under O2 and O3.
+
+### H5: A command whose result is a complete collection under O6 SHOULD offer `--plain`.
+
+**H5a** A command whose result is bounded under O6b MAY offer it only for a page explicitly selected with `--limit` or, under C1, `--cursor`.
+
+**H5b** `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
+
+Three services, one per line:
+
+```console
+$ mytool services list --plain
+api
+worker
+scheduler
+```
+
+## Extensions
+
+An extension is an optional guarantee. A tool enables one by naming it in D7 `conformance.extensions`, and the claim then binds every command the claim covers. Each extension names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on. A caller that does not recognize a name relies on nothing under it (D7c).
+
+## Extension `continuation`: Bounded reads MUST be resumable.
+
+A caller that received one page or one run of records can continue from where it stopped without repeating or skipping items.
+
+### C1: Collections MUST page by opaque cursor.
+
+The command MUST accept `--cursor`, and each JSON page MUST contain `next_cursor`, an opaque string that the caller passes unchanged to `--cursor`, or `null` on the final page. `has_more` MUST be `true` if and only if `next_cursor` is not `null`. Source, filters, and order MUST remain unchanged when using `--cursor`; the limit and output format MAY change. If the cursor is invalid, expired, incompatible, or cannot continue the same result set, the command MUST fail with `kind` `cursor_unavailable`. It MUST NOT silently restart from another position. Pagination MUST use a stable, documented order and document whether pages read live state or one fixed snapshot.
+
+The same page from a tool that declares `continuation`:
+
+```console
+$ mytool jobs list --limit 2 --json
+```
+
+```json
+{
+  "items": [
+    {"id": "job_123", "status": "running"},
+    {"id": "job_456", "status": "queued"}
+  ],
+  "has_more": true,
+  "next_cursor": "cur_abc123"
+}
+```
+
+### C2: Streams MUST resume after a record.
+
+`output` MUST be an object schema with `cursor` as a required string property, and each `cursor` MUST be a non-empty opaque string. The command MUST accept `--after-cursor` and resume strictly after that record without skipping any matching record in the same logical stream. Inputs selecting the source, filters, or order MUST remain the same; limits, following, timeouts, and output format MAY change. If this continuation cannot be guaranteed because the cursor or required history is invalid, expired, or incompatible, the command MUST fail with `kind` `cursor_unavailable`; it MUST NOT silently resume elsewhere.
+
+A command schema excerpt with the required `cursor` property:
 
 ```json
 {
@@ -708,152 +941,29 @@ An unavailable cursor fails through F3 on stderr:
 
 Non-normative note: cursor-based resume guarantees a continuation position, not exactly-once delivery. Persisting a cursor only after processing its record minimizes replay; a crash before that checkpoint may cause the record to be received again.
 
-### O8: Output MUST survive normal pipeline closure.
+## Extension `managed`: Accepted work MUST be observable.
 
-When a downstream reader closes a pipe, a command that has not otherwise failed MUST stop writing and emit no stack trace or broken-pipe diagnostic. Its exit status MAY follow the platform's pipe-closure convention; any non-zero meaning MUST be documented under F1c.
+A caller that holds an identifier under R7 can learn the current state of the work, wait for its terminal state, and, where the tool offers them, cancel or suspend it.
 
-## Stage F: Failure
+### M1: Managed work MUST expose status and wait.
 
-Failures need a stable machine signal and enough information for the caller to choose its next action. Success must not hide incomplete or uncertain work.
+**M1a** Commands: the tool MUST provide commands, usable in a non-interactive context, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under R7a; their names fall under D4b. Both commands MUST declare `effects: read_only`. The status command MUST report the current state without waiting for a terminal state.
 
-### F1: Exit codes MUST be stable and documented.
+**M1b** Results: structured results from both commands MUST contain `status` and the identifier under the same field name. The F3 object of a failed wait MUST carry `status` and the identifier in `context`.
 
-**F1a** Unless a released contract assigns another meaning to `1` or `2`, tool-wide D7 `exit_codes` MUST contain the decimal-string keys in the table below with these meanings. A tool that retains such a released meaning MUST document, in `exit_codes`, the code it uses for each meaning in the table.
+**M1c** Status values: the D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail with the applicable `kind` and MUST NOT return `unknown`.
 
-| Code | Meaning |
-|---|---|
-| `0` | Success, including an empty result or no differences. |
-| `1` | Generic failure. |
-| `2` | Usage error. |
+**M1d** Identifiers: any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail with `kind` `not_found` and MUST NOT be reported as an operation state.
 
-**F1b** Exit `0` MUST mean the command observed its documented postcondition through the interface it used. Independent re-verification is not required. For managed operations, acceptance and completion fall under M1 and M2.
+**M1e** Wait: the wait command MUST exit `0` only when it observes the terminal state `succeeded`; any other terminal state MUST fail with `kind` `operation_failed`. Failure to observe the operation MUST fail with the applicable `kind`. The wait command MUST accept `--timeout` under I8b; its own deadline fails with `kind` `timeout`. It MUST return immediately when the operation is already terminal. Timing out or terminating it MUST NOT cancel or otherwise change the operation, and MUST NOT be reported as a terminal operation outcome.
 
-**F1c** Additional codes MUST each have one stable meaning. Fine-grained failures MUST use F3 `kind` instead.
+**M1f** Listing: the tool SHOULD provide a command, usable in a non-interactive context, that lists managed operations with the identifier under the same field name and `status`; its result falls under O6.
 
-**F1d** D8 command `exit_codes` MUST appear only when they add a code or refine a tool-wide description without changing its meaning.
+### M2: Cancellation MUST be honest.
 
-### F2: Structured errors MUST have one location.
+**M2a** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a non-interactive context, whose name falls under D4b. It MUST accept the identifier returned under R7a, declare `effects: idempotent`, and fall under Stage R.
 
-To fail with a `kind` is to exit non-zero and, wherever this requirement demands the object, emit an F3 object with that `kind`; other requirements cite this definition. When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object. The tool MUST emit that object when the selected stdout format is machine-readable or stderr is not a TTY, including under `--quiet`; otherwise the object MAY be omitted. Whenever the object is emitted, it MUST be the last non-empty stderr line, and a requirement that names an F3 `kind` applies to it. The object MUST NOT be written to stdout.
-
-The same failure with `--json`, as an F3 object on stderr, and at a terminal:
-
-```console
-$ mytool deploy api --env prod --yes --json
-{"error":{"kind":"image_not_found","message":"Cannot deploy 'api': image 'web:v2.1.0' was not found","hint":"Run mytool images list web"}}
-
-$ mytool deploy api --env prod --yes
-Error: Cannot deploy 'api': image 'web:v2.1.0' was not found
-Run: mytool images list web
-```
-
-### F3: Structured errors MUST have a stable envelope.
-
-**F3a** The document MUST contain exactly one top-level field, `error`, whose value is an object with the fields in the table below. Its `kind` is the only stable match target; message text is not a stable interface.
-
-| Field | Presence | Contract |
-|---|---|---|
-| `kind` | MUST | String with stable machine meaning; the values in the `kind` table below have shared meanings. |
-| `message` | MUST | String identifying the failed operation and cause. |
-| `retryable` | MAY | Boolean; see F3b. |
-| `action` | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
-| `hint` | SHOULD | String recovery step; see F3b. |
-| `context` | MAY | Object containing machine-readable values needed for recovery. |
-
-**F3b** `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess.
-
-**F3c** A tool MUST NOT use a `kind` listed below with another meaning. It SHOULD use a listed `kind` when its definition applies. A requirement that names a `kind` keeps its own keyword. Any other `kind` is tool-defined. A released `kind` whose meaning conflicts with the table is brownfield: the tool MAY retain it and MUST document it as not conforming.
-
-| `kind` | Meaning | Named by |
-|---|---|---|
-| `invalid_input` | The call is a usage error or exceeds an I7 bound. | I6 |
-| `not_found` | A target identified by an argument or flag value does not exist in the state the tool manages or targets. | M2 |
-| `conflict` | Authoritative state conflicts with the requested change, such as a concurrent modification or a strict create whose target exists. | R5 |
-| `permission_denied` | The caller is identified and the action is forbidden. | |
-| `unauthenticated` | The caller could not be identified: credentials are missing, invalid, or expired. | |
-| `timeout` | The command's own I8 deadline passed, and any intended effect is known not to have happened. | |
-| `unavailable` | A dependency rejected or failed the request transiently, including rate limiting. | |
-| `outcome_unknown` | The intended effect may have happened and was not observed. | F4 |
-| `interrupted` | The user interrupted the command and F4 does not apply. | F5 |
-| `cursor_unavailable` | The cursor is invalid, expired, or incompatible, or required history is missing. | O6, O7 |
-| `confirmation_required` | R3 stopped the call before its gated effect. | R3 |
-| `operation_failed` | A managed operation reached a terminal state other than `succeeded`; `context` carries the identifier and `status`. | M1, M2 |
-| `precondition_failed` | A documented precondition that `--force` overrides is not met. | |
-
-A complete error object with every field:
-
-```json
-{
-  "error": {
-    "kind": "image_not_found",
-    "message": "Cannot deploy 'web-api': image 'web:v2.1.0' was not found",
-    "retryable": false,
-    "action": "agent",
-    "hint": "Run mytool images list web",
-    "context": {"service": "web-api", "image": "web:v2.1.0"}
-  }
-}
-```
-
-### F4: Fallbacks and uncertain outcomes MUST be explicit.
-
-**F4a** If a failed command may have caused an intended effect and did not observe the outcome, it MUST use F3 `kind` `outcome_unknown` and MUST NOT report completion or absence. Known completed effects SHOULD be listed in `context` under `completed`, an array of the affected targets as the caller named them. Which prior stdout remains valid falls under O5a and O7e.
-
-**F4b** If usable partial results survive a failure, the structured error SHOULD identify them in `context`.
-
-**F4c** After a failure, a command MUST NOT silently replace the requested target, source, or mode. It MUST fail with a `kind` or identify the substitution in its declared structured result.
-
-A timed-out request whose effect was not observed:
-
-```json
-{"error":{"kind":"outcome_unknown","message":"The deployment request timed out and its outcome could not be determined","retryable":false,"context":{"deployment_id":"dep_123"}}}
-```
-
-### F5: User interruption MUST fail honestly.
-
-A command that receives the platform's normal user-interrupt request MUST exit without a stack trace and fail with `kind` `interrupted`, unless F4 requires `outcome_unknown`. Interrupting observation of managed work MUST NOT cancel or otherwise change that work.
-
-## Stage M: Managed operations
-
-A tool without managed operations has no Stage M requirements.
-
-### M1: Accepted work MUST remain identifiable.
-
-**M1a** A command that exits before requested work finishes MUST return a non-empty canonical identifier in structured success output. Its field name is tool-defined but MUST remain consistent across the command that starts the work and every command that addresses it. If the command that starts the work fails after obtaining the identifier, any F3 object it emits MUST carry the identifier in `context` under the same field name.
-
-**M1b** Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and MUST NOT later resolve to a different entity. Its D5 breadcrumb SHOULD name the wait command.
-
-**M1c** When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD take its name from H1b. The D8 `description` of a command that starts managed work MUST state whether it waits for completion by default. A command that waits for the work it started MUST fail with `kind` `operation_failed` when that work does not succeed. If its deadline passes after the work was accepted, it MUST fail with `kind` `outcome_unknown` and carry the identifier under M1a.
-
-A `deploy` that waits for its deployment, and the wait command observing the same terminal state under M2, both fail on stderr with `operation_failed` and carry the identifier:
-
-```console
-$ mytool deploy api --env prod --yes --json
-{"error":{"kind":"operation_failed","message":"Deployment dep_123 failed: image pull error","context":{"deployment_id":"dep_123","status":"failed"}}}
-
-$ mytool deployments wait dep_123 --json
-{"error":{"kind":"operation_failed","message":"Deployment dep_123 failed","context":{"deployment_id":"dep_123","status":"failed"}}}
-```
-
-### M2: Managed work MUST expose status and wait.
-
-**M2a** Commands: the tool MUST provide commands, usable in a non-interactive context, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under M1a; their names fall under D4b. Both commands MUST declare `effects: read_only`. The status command MUST report the current state without waiting for a terminal state.
-
-**M2b** Results: structured results from both commands MUST contain `status` and the identifier under the same field name. The F3 object of a failed wait MUST carry `status` and the identifier in `context`.
-
-**M2c** Status values: the D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail with the applicable `kind` and MUST NOT return `unknown`.
-
-**M2d** Identifiers: any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail with `kind` `not_found` and MUST NOT be reported as an operation state.
-
-**M2e** Wait: the wait command MUST exit `0` only when it observes the terminal state `succeeded`; any other terminal state MUST fail with `kind` `operation_failed`. Failure to observe the operation MUST fail with the applicable `kind`. The wait command MUST accept `--timeout` under I8b; its own deadline fails with `kind` `timeout`. It MUST return immediately when the operation is already terminal. Timing out or terminating it MUST NOT cancel or otherwise change the operation, and MUST NOT be reported as a terminal operation outcome.
-
-**M2f** Listing: the tool SHOULD provide a command, usable in a non-interactive context, that lists managed operations with the identifier under the same field name and `status`; its result falls under O6.
-
-### M3: Cancellation MUST be honest.
-
-**M3a** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a non-interactive context, whose name falls under D4b. It MUST accept the identifier returned under M1a, declare `effects: idempotent`, and fall under Stage R.
-
-**M3b** Structured success MUST contain `status` and the identifier under the same field name; `changed` falls under R5a. Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
+**M2b** Structured success MUST contain `status` and the identifier under the same field name; `changed` falls under R5a. Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
 
 A cancellation that is accepted, then observed by the wait command, which fails on stderr because the terminal state is not `succeeded`:
 
@@ -868,76 +978,8 @@ $ mytool jobs wait job_123 --timeout 5m --json
 {"error":{"kind":"operation_failed","message":"Job job_123 was canceled","context":{"job_id":"job_123","status":"canceled"}}}
 ```
 
-### M4: Resumable suspension MUST remain distinct from cancellation.
+### M3: Resumable suspension MUST remain distinct from cancellation.
 
-**M4a** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a non-interactive context, whose names fall under D4b. Both MUST accept the identifier returned under M1a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
+**M3a** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a non-interactive context, whose names fall under D4b. Both MUST accept the identifier returned under R7a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
 
-**M4b** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M3 remains terminal and MUST NOT mean suspension. On an operation that is already terminal, they fall under M3b.
-
-## Stage H: Human interface
-
-A person at the terminal should find familiar flag names, standard environment behavior, and output that remains readable without color.
-
-### H1: Greenfield flags MUST have canonical long names.
-
-**H1a** A greenfield flag MUST use kebab-case, and each concept MUST have one canonical long name.
-
-**H1b** When the tool supports a concept in the table below, it SHOULD use the listed long name; a requirement that names a flag keeps its own keyword. A listed alias MAY be added when it has no conflicting local meaning. Every accepted alias MUST behave exactly like its canonical flag and appear in the I1 descriptor.
-
-| Concept | Long name | Common alias | Related rule |
-|---|---|---|---|
-| Help | `--help` | `-h` | D3 |
-| Version | `--version` | `-V` | D4 |
-| Select a configuration file | `--config PATH` | `-c PATH` | I2 |
-| Supply one secret | `--token-file PATH` | No recommendation | I4 |
-| Supply structured credentials | `--credentials-file PATH` | No recommendation | I4 |
-| Bound a wait | `--timeout DURATION` | No recommendation | I8, M2 |
-| Override a documented precondition | `--force` | `-f` | R3 |
-| Confirm a prompt | `--yes` | `-y` | R3 |
-| Preview a mutation | `--dry-run` | `-n` | R4 |
-| Keep a repeat from duplicating its effect | `--idempotency-key KEY` | No recommendation | R5 |
-| Select JSON or NDJSON output | `--json` | No recommendation | O2 |
-| Select a named format | `--format NAME` | No recommendation | O2 |
-| Write the result to a path | `--output-file PATH` | No recommendation | O2 |
-| More diagnostics | `--verbose` | `-v` | O3 |
-| Less diagnostics | `--quiet` | `-q` | O3, F2 |
-| Bound returned items or records | `--limit N` | No recommendation | O6, O7 |
-| Resume a collection | `--cursor CURSOR` | No recommendation | O6 (`continuation`) |
-| Resume a stream after a record | `--after-cursor CURSOR` | No recommendation | O7 (`continuation`) |
-| Keep reading new records | `--follow` | No recommendation | O7 |
-| Return after accepting managed work | `--background` | `--bg` | M1 |
-| Control color | `--color WHEN` | No recommendation | H4 |
-| One item per line | `--plain` | No recommendation | H5 |
-
-### H2: Tools with nested commands SHOULD provide shell completions.
-
-When provided, static command, flag, and alias candidates MUST match the installed interface.
-
-### H3: External editors and pagers MUST respect user selection.
-
-A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documented setting overrides them. A tool that starts a pager MUST honor `PAGER` unless a documented setting overrides it.
-
-When an editor or pager may start falls under I5b and I5d.
-
-### H4: Color MUST remain optional.
-
-**H4a** A tool that emits color MUST disable it when `NO_COLOR` is non-empty, `TERM` is `dumb`, or the output stream is not a TTY. A flag or a documented setting overrides that default on human-readable output only. Color MUST NOT be the only carrier of information.
-
-**H4b** If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`. `--color always` has no effect on `--plain` output.
-
-At a terminal, `NO_COLOR=1 mytool services list` and `TERM=dumb mytool services list` print no color. In a pipe, `mytool services list --format text --color always | less -R` keeps color because the output is human-readable, while `mytool services list --color always | jq .` emits none because stdout is then machine-readable under O2 and O3.
-
-### H5: A command whose result is a complete collection under O6 SHOULD offer `--plain`.
-
-**H5a** A command whose result is bounded under O6b MAY offer it only for a page explicitly selected with `--limit` or, when the tool declares `continuation`, `--cursor`.
-
-**H5b** `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
-
-Three services, one per line:
-
-```console
-$ mytool services list --plain
-api
-worker
-scheduler
-```
+**M3b** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M2 remains terminal and MUST NOT mean suspension. On an operation that is already terminal, they fall under M2b.

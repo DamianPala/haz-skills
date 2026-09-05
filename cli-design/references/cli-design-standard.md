@@ -27,9 +27,11 @@ This section is non-normative. It records the decisions that shape the standard.
 ## Terms
 
 - **Greenfield, brownfield.** These words describe a command path, flag, environment variable, or F3 `kind`, not a tool. It is brownfield when it preserves a released contract and greenfield otherwise.
-- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the selected stdout format is human-readable, and in a non-interactive context otherwise. These terms govern prompts and consent; the prompt stream, interactive sessions, and pagers carry further conditions under I5a, I5b, and I5d.
+- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the selected stdout format is human-readable, and in a non-interactive context otherwise. These terms govern prompts and consent; the stream a prompt is written to, interactive sessions, and pagers carry further conditions under I5a, I5b, and I5d.
 - **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
 - **Introspection command.** The arguments, excluding the program name, that return the D7 index. It is `schema` unless another form is required under D6a.
+- **Caller.** The person or program that runs the tool and consumes its output.
+- **Managed operation.** Work that continues after the command that started it exits.
 - **Core requirement.** A normative statement not labeled with an extension name, including an unlabeled clause within a requirement that also contains extension clauses.
 - **Extension.** A named set of clauses labeled with that name. An extension is an optional guarantee that a tool enables by declaring it in D7.
 
@@ -55,7 +57,7 @@ A caller should be able to choose a command and construct a valid call without r
 
 ### D1: Published interfaces MUST match actual behavior.
 
-Help, schema, documentation for the installed tool version, and shipped agent guidance MUST agree with the tool and with each other.
+Help, introspection output, documentation for the installed tool version, and shipped agent guidance MUST agree with the tool and with each other.
 
 ### D2: Discovery MUST be layered.
 
@@ -114,7 +116,7 @@ The same call under `--json` carries it as `next`:
 
 **D6a** Entry: the introspection command MUST be unambiguous from the arguments alone and MUST NOT dispatch to a retained domain operation. On greenfield paths, `schema` as the first argument MUST be reserved for introspection. When a retained contract already uses `schema` as its first argument, the tool MUST provide introspection in another form, such as a prefix (`tool contract schema`) or a flag (`tool --schema`).
 
-**D6b** Consistency: command paths, arguments, flags, and defaults exposed by schema MUST match the parser used at runtime. Shared definitions, generation, and conformance tests are all valid ways to enforce this.
+**D6b** Consistency: command paths, arguments, flags, and defaults exposed by the introspection output MUST match the parser used at runtime. Shared definitions, generation, and conformance tests are all valid ways to enforce this.
 
 **D6c** Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts.
 
@@ -122,7 +124,7 @@ The same call under `--json` carries it as `next`:
 
 **D6e** Errors: an unknown path MUST be a usage error and name the nearest valid paths, if any.
 
-### D7: The schema index MUST let callers choose a command safely.
+### D7: The introspection index MUST let callers choose a command safely.
 
 **D7a** The index MUST contain the fields in the table below.
 
@@ -153,7 +155,7 @@ Fields marked `always` in the table below MUST be present. A conditional field M
 | `flags` | array | always | I1 command-specific flag descriptors. Effective flags are D7 `global_flags` plus this array. |
 | `effects` | string | always | MUST equal `read_only`, `idempotent`, or `non_idempotent` under R1a. |
 | `confirm` | boolean | always | MUST be `true` when any valid call may require `--yes` under R3a. |
-| `interactive` | boolean | always | MUST be `true` when any valid invocation starts an interactive session under I5b and `false` otherwise. |
+| `interactive` | boolean | always | MUST be `true` when any valid call starts an interactive session under I5b and `false` otherwise. |
 | `stream` | boolean | success emits a record stream | MUST be `true`. `output` describes one record; see O7. |
 | `output` | object | success conveys data beyond the exit status, or `changed` is required under R5a | O4 JSON Schema for the success document or one O7 record. |
 | `exit_codes` | object | adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
@@ -302,7 +304,7 @@ $ hashfile schema
 
 ### D10: Agent guidance MUST add context, not repeat the interface.
 
-The tool MAY ship `SKILL.md` or `AGENTS.md` when domain knowledge or workflows need explanation. Guidance MUST point to commands and schema, and MUST NOT duplicate their catalogs.
+The tool MAY ship `SKILL.md` or `AGENTS.md` when domain knowledge or workflows need explanation. Guidance MUST point to commands and the introspection output, and MUST NOT duplicate their catalogs.
 
 ## Stage I: Invocation and input
 
@@ -325,7 +327,7 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 | `repeatable` | boolean | MAY be `true` only on flags. It allows repeated occurrences and resolves their values to an ordered array. |
 | `accepts_stdin` | boolean | MUST be `true` when `-` selects stdin instead of a file. |
 
-**I1b** Arguments MUST appear in invocation order.
+**I1b** Arguments MUST appear in argument order.
 
 **I1c** A flag with `type: boolean` MUST set its value to `true` when given by its bare name and MUST NOT consume the following argument as its value; it MAY also accept both `--name=true` and `--name=false`.
 
@@ -369,7 +371,7 @@ $ mytool deploy service-a --manifest - < manifest.json
 
 **I4a** A command that needs a secret MUST provide a source usable in a non-interactive context, such as a credential store, file, stdin, or environment variable. Greenfield commands SHOULD use `--token-file PATH` for one secret and `--credentials-file PATH` for structured credentials; either flag SHOULD accept `-` for stdin. Secret sources and their precedence MUST be documented.
 
-**I4b** A secret MUST NOT appear in help, schema, logs, errors, or normal output unless retrieval is the command's documented purpose.
+**I4b** A secret MUST NOT appear in help, introspection output, logs, errors, or normal output unless retrieval is the command's documented purpose.
 
 With `--token-file token.txt` under `--verbose`, a diagnostic may name the source, such as `Using token from token.txt`, but not the token.
 
@@ -381,7 +383,7 @@ With `--token-file token.txt` under `--verbose`, a diagnostic may name the sourc
 
 **I5c** Human action: a workflow MAY require an out-of-band human action. Its entry point MUST work in a non-interactive context and be discoverable through D7 and D8. Work that continues after that command exits falls under Stage M. In a non-interactive context, a command MUST NOT wait for a human action outside the call, such as a browser or device approval, unless that wait is the command's documented purpose; it MUST instead fail before side effects and name the entry point or I4 source that resolves it.
 
-**I5d** Paging: a pager MAY start only when stdout is a TTY and the selected format is human-readable; see H3.
+**I5d** Paging: a pager MAY start only when stdout is a TTY and the selected stdout format is human-readable; see H3.
 
 While stdin supplies the manifest, the command cannot prompt for confirmation, so it fails and names `--yes`:
 
@@ -395,7 +397,7 @@ Run: mytool deploy api --env prod --manifest - --yes
 
 **I6a** The tool MUST reject unknown flags, unsupported arguments, invalid values, and conflicting inputs as usage errors. A usage error MUST use F3 `kind` `invalid_input`.
 
-**I6b** `--` MUST end option parsing; later tokens MUST NOT be interpreted as flags. A greenfield command SHOULD accept flags before, between, and after positional arguments up to `--`.
+**I6b** `--` MUST end flag parsing; later tokens MUST NOT be interpreted as flags. A greenfield command SHOULD accept flags before, between, and after positional arguments up to `--`.
 
 **I6c** The tool MUST validate every locally checkable input before changing state.
 
@@ -446,7 +448,7 @@ This stage covers calls that mutate state or may be repeated. Safeguards follow 
 | `idempotent` | The command may change intended state, but repeating a successful call with the same inputs MUST succeed without another intended state transition. |
 | `non_idempotent` | The command meets neither preceding guarantee; a repeat may cause another intended effect or return a stable conflict. |
 
-**R1b** The declaration MUST cover every valid invocation. Declare `non_idempotent` when any invocation lacks the repeat guarantee. Otherwise declare `idempotent` when any invocation can change intended state. Otherwise declare `read_only`. A changing response, incidental telemetry, logs, caches, metering, or rate limiting do not alone change the classification.
+**R1b** The declaration MUST cover every valid call. Declare `non_idempotent` when any call lacks the repeat guarantee. Otherwise declare `idempotent` when any call can change intended state. Otherwise declare `read_only`. A changing response, incidental telemetry, logs, caches, metering, or rate limiting do not alone change the classification.
 
 For example, a delete by stable identifier whose repeat succeeds with `changed: false` is `idempotent`; a delete whose repeat fails with `not_found`, or whose targets are resolved at run time and may differ on a later repeat, such as the newest item or every stale item, is `non_idempotent`.
 
@@ -502,9 +504,9 @@ $ mytool services prune --env staging --yes --json
 
 ### R5: Mutating commands MUST report what happened.
 
-**R5a** Every command whose `effects` is not `read_only` MUST declare a boolean `changed` in its D8 output and return it in every structured success response. `changed` reports whether this invocation caused a new intended state transition, not whether background work completed.
+**R5a** Every command whose `effects` is not `read_only` MUST declare a boolean `changed` in its D8 output and return it in every structured success response. `changed` reports whether this call caused a new intended state transition, not whether background work completed.
 
-**R5b** When authoritative state reports a concurrent conflict, the CLI MUST fail with F3 `kind` `conflict` and MUST NOT silently overwrite it.
+**R5b** When authoritative state reports a concurrent conflict, the tool MUST fail with F3 `kind` `conflict` and MUST NOT silently overwrite it.
 
 **R5c** A `non_idempotent` command whose repetition could duplicate an effect SHOULD accept `--idempotency-key` when the backing service supports idempotency keys.
 
@@ -512,7 +514,7 @@ For example, an idempotent create-or-get may return `changed: true` and then `ch
 
 ### R6: Built-in retries MUST be safe and bounded.
 
-A CLI that retries requests internally MUST retry only failures that would be reported with `retryable: true` under F3b, and only for `read_only` or `idempotent` commands, or requests protected by an idempotency key. It MUST preserve the original inputs, limit the number of attempts, and remain within the I8 timeout. It SHOULD honor `Retry-After` when the timeout allows.
+A tool that retries requests internally MUST retry only failures that would be reported with `retryable: true` under F3b, and only for `read_only` or `idempotent` commands, or requests protected by an idempotency key. It MUST preserve the original inputs, limit the number of attempts, and remain within the I8 timeout. It SHOULD honor `Retry-After` when the timeout allows.
 
 ## Stage O: Output
 
@@ -545,11 +547,11 @@ $ mytool services list --json --output-file services.json
 
 **O3a** Channels: stdout MUST contain only the result; stderr MUST carry logs, warnings, progress, and errors.
 
-**O3b** Decoration: machine-readable stdout MUST contain only the selected representation, without banners, terminal decoration, or ANSI escapes. Terminal decoration MAY appear only when its stream is a TTY or a documented flag or environment variable forces it. Animated progress MAY appear only when stderr is a TTY. On non-TTY stderr, progress MUST use complete plain lines or be omitted.
+**O3b** Decoration: machine-readable stdout MUST contain only output in the selected stdout format, without banners, terminal decoration, or ANSI escapes. Terminal decoration MAY appear only when its stream is a TTY or a documented flag or environment variable forces it. Animated progress MAY appear only when stderr is a TTY. On non-TTY stderr, progress MUST use complete plain lines or be omitted.
 
 **O3c** Consistency: human and machine renderings MAY differ in detail but MUST NOT contradict each other. When human-readable output is only a bounded preview of the result, it MUST say so and identify how to retrieve the complete result.
 
-**O3d** Untrusted content: machine output MUST serialize caller-controlled and remote values through the selected format. Human output MUST escape terminal control sequences in those values.
+**O3d** Untrusted content: machine output MUST serialize caller-controlled and remote values through the selected stdout format. Human output MUST escape terminal control sequences in those values.
 
 ### O4: A command schema MUST describe its JSON success value.
 
@@ -751,7 +753,7 @@ Run: mytool images list web
 | `hint` | SHOULD | String recovery step; see F3b. |
 | `context` | MAY | Object containing machine-readable values needed for recovery. |
 
-**F3b** `retryable` is `true` only when the same invocation may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess.
+**F3b** `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess.
 
 **F3c** A tool MUST NOT use a `kind` listed below with another meaning. It SHOULD use a listed `kind` when its definition applies. A requirement that names a `kind` keeps its own keyword. Any other `kind` is tool-defined. A released `kind` whose meaning conflicts with the table is brownfield: the tool MAY retain it and MUST document it as not conforming.
 
@@ -805,7 +807,7 @@ A command that receives the platform's normal user-interrupt request MUST exit w
 
 ## Stage M: Managed operations
 
-A managed operation is work that continues after the command that started it exits. A tool without such work has no Stage M requirements.
+A tool without managed operations has no Stage M requirements.
 
 ### M1: Accepted work MUST remain identifiable.
 
@@ -919,9 +921,9 @@ When an editor or pager may start falls under I5b and I5d.
 
 At a terminal, `NO_COLOR=1 mytool services list` and `TERM=dumb mytool services list` print no color. In a pipe, `mytool services list --format text --color always | less -R` keeps color because the output is human-readable, while `mytool services list --color always | jq .` emits none because stdout is then machine-readable under O2 and O3.
 
-### H5: List-like commands with complete results SHOULD offer `--plain`.
+### H5: A command whose result is a complete collection under O6 SHOULD offer `--plain`.
 
-**H5a** A paginated command MAY offer it only for a page explicitly selected with `--limit` or, when the tool declares `continuation`, `--cursor`.
+**H5a** A command whose result is bounded under O6b MAY offer it only for a page explicitly selected with `--limit` or, when the tool declares `continuation`, `--cursor`.
 
 **H5b** `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
 

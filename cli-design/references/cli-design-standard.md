@@ -529,7 +529,7 @@ A tool that retries requests internally MUST retry only failures that would be r
 
 **R7b** Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and MUST NOT later resolve to a different entity. The tool SHOULD document how a caller observes the work, and when a wait command exists, the identifier's D5 breadcrumb SHOULD name it.
 
-**R7c** When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD take its name from H1b. The D8 `description` of a command that starts managed work MUST state whether it waits for completion by default. A command that waits for the work it started MUST fail with `kind` `operation_failed` when that work does not succeed. If its deadline passes after the work was accepted, it MUST fail with `kind` `timeout` when the work's state was observed, carrying the identifier under R7a and the observed state in `context`, and with `kind` `outcome_unknown` when it was not.
+**R7c** When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. Its flag SHOULD take its name from H1b. The D8 `description` of a command that starts managed work MUST state whether it waits for completion by default. A command that waits for the work it started MUST fail with `kind` `operation_failed` when that work does not succeed. If its deadline passes after the work was accepted, it MUST fail with `kind` `timeout` when the work's state was observed, carrying the identifier under R7a and the observed state in `context`, and with `kind` `outcome_unknown` when it was not. That deadline MUST NOT cancel or otherwise change the work.
 
 Observing and controlling accepted work falls under the `managed` extension (M1-M3).
 
@@ -755,7 +755,7 @@ Run: mytool images list web
 | `conflict` | Authoritative state conflicts with the requested change, such as a concurrent modification or a strict create whose target exists. | R5 |
 | `permission_denied` | The caller is identified and the action is forbidden. | |
 | `unauthenticated` | The caller could not be identified: credentials are missing, invalid, or expired. | |
-| `timeout` | The command's own I8 deadline passed, and any intended effect is known not to have happened. | |
+| `timeout` | The command's own I8 deadline passed; any intended effect either is known not to have happened or is identified in `context` under R7a. | |
 | `unavailable` | A dependency rejected or failed the request transiently, including rate limiting. | |
 | `outcome_unknown` | The intended effect may have happened and was not observed. | F4 |
 | `interrupted` | The user interrupted the command and F4 does not apply. | F5 |
@@ -879,7 +879,7 @@ A caller that received one page or one run of records can continue from where it
 
 **C1b** Binding: source (the command path and the data set it reads), filters, and order MUST remain unchanged when using `--cursor`; the limit and output format MAY change.
 
-**C1c** Failure: if the cursor is invalid, expired, incompatible, or cannot continue the same result set, the command MUST fail with `kind` `cursor_unavailable`. It MUST NOT silently restart from another position. A cursor identifies a position in the documented order; a position that no longer exists in the collection cannot continue, and a position immediately after the last item MAY yield an empty final page.
+**C1c** Failure: if the cursor is invalid, expired, incompatible, or cannot continue the same result set, the command MUST fail with `kind` `cursor_unavailable`. It MUST NOT silently restart from another position. A cursor identifies a position in the documented order; a position the documented order can no longer place cannot continue, and a position immediately after the last item MAY yield an empty final page.
 
 **C1d** Order: pagination MUST use a stable, documented order and document whether pages read live state or one fixed snapshot; whether continuation is exact across concurrent insertions and deletions follows from that choice.
 
@@ -955,9 +955,9 @@ A caller that holds an identifier under R7 can learn the current state of the wo
 
 **M1a** Commands: the tool MUST provide commands, usable in a non-interactive context, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under R7a; their names fall under D4b. Both commands MUST declare `effects: read_only`. The status command MUST report the current state without waiting for a terminal state.
 
-**M1b** Results: structured results from both commands MUST contain `status` and the identifier under the same field name. The F3 object of a failed wait MUST carry the identifier and `status` in `context`; `status` is the last observed state, or `null` when no state was observed.
+**M1b** Results: structured results from both commands MUST contain `status` and the identifier under the same field name. The F3 object of a wait that fails after argument parsing MUST carry the identifier and `status` in `context`; `status` is the last observed state, or `null` when no state was observed, including under M1d `not_found`.
 
-**M1c** Status values: the status command's D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists; the wait command's success schema lists only the values its success can carry under M1e, and other terminal values appear in `context.status` of its F3 object. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail with the applicable `kind` and MUST NOT return `unknown`.
+**M1c** Status values: the status command's D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists; the wait command's success schema MUST declare `status` as an enum listing only the values its success can carry under M1e; other terminal values appear in `context.status` of its F3 object. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail with the applicable `kind` and MUST NOT return `unknown`.
 
 **M1d** Identifiers: any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail with `kind` `not_found` and MUST NOT be reported as an operation state.
 

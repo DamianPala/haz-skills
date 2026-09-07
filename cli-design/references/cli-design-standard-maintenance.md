@@ -34,6 +34,8 @@ The standard stays short. Text that neither states a requirement, nor resolves a
 
 Accommodations for released contracts live under Existing tools. A requirement elsewhere states the baseline and carries no brownfield qualifier; what a released path may keep is a row or clause in that section, not a condition in the requirement.
 
+A term in Terms names exactly the condition it replaced. A change to a D8 field condition is rechecked against every term that reads that field.
+
 Requirement and clause identifiers are scoped to a version of this document: after inserting, splitting, or removing a clause, later clauses are relettered in reading order and internal references are updated; an external citation names the version.
 
 ## Change workflow

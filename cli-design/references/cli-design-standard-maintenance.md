@@ -17,15 +17,7 @@ A candidate extension name enters the standard only when it names one guarantee 
 
 A new reserved field name or `kind` MUST be a multi-word `snake_case` name; a new reserved flag MUST be a multi-word kebab-case long name under H1a. A draft.6 audit of output fields from AWS service models, `gh`, and npm found collisions among the reviewed single-word candidates and none among the multi-word `snake_case` candidates the standard reserved.
 
-## Three kinds of requirement
-
-A requirement that most unrelated tools already satisfy without having read this document records a convergence, and the convergence is its justification. A requirement no such tool satisfies and none contradicts is an addition; it may be right, and it carries an adoption cost that a convergence does not. A requirement several unrelated tools independently decided against needs an argument beyond this document's internal consistency. The kinds are not labels in the standard; this section records how requirements scored when checked against real tools.
-
-Checked in draft.6 against five existing tools used as external comparators (`gh`, `git`, `npm`, `systemctl`, `aws`):
-
-- Convergences (four or five of five satisfy): I2a, I2b, I2c, I4b, I6c, I6d, O1, O8 (its behavioral half), and H2. I2b is the strongest case: three unrelated tools document the same precedence of flags over environment over configuration.
-- Additions (none of five satisfies, none contradicts): the `--timeout` requirement in I8b, retained; the audit found no `--timeout` on waiting commands in the five reviewed interfaces. The verbose-liveness recommendation added to I8b in draft.6 is a separate addition, not yet scored.
-- Decided against by several tools, and what draft.6 did: R3d (five of five use one flag for both roles; relaxed for released contracts), O2b (five of five have commands whose stdout is not a document they own; `delegates_stdout` added), O2c (disputed in both directions: one tool defends its released non-TTY default, another reports that the TTY-default recommendation would make its tool worse; the accommodation now reaches tools without introspection through the `core-behavior` profile), O6b and O6c (no tool returns collections in the O6c shape; not resolved, see Known limits).
+A candidate requirement is checked against existing tools that never read this document. One that most such tools already satisfy records a convergence, and the convergence is its justification. One that no such tool satisfies and none contradicts is an addition; it may be right, and it carries an adoption cost a convergence does not. One that several unrelated tools independently decided against needs an argument beyond this document's internal consistency. The kinds are not labels in the standard; the scoring of each version's requirements lives in the maintainers' notes.
 
 ## Known limits
 

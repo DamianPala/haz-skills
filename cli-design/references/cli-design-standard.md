@@ -17,7 +17,7 @@ This section is non-normative. It records the decisions that shape the standard.
 - **A process contract.** The standard binds arguments, the standard streams, environment variables, exit codes, and one introspection command. It requires no daemon, socket, or protocol library, so any tool that can be executed can conform.
 - **A testable contract.** Each requirement has an observable pass or fail. A preference without a test belongs in guidance. For a requirement that a call must not produce an effect, the observable is the tool's declaration, not the effect's absence: a reviewer who may not mutate state verifies Stage R through D6, D7, and D8, or through the documentation that stands in for them under the `core-behavior` profile. A tool that declares nothing is not thereby conforming; it is unverifiable, and this standard distinguishes the two.
 - **An introspection command, not `--help --json`.** D7 and D8 form a versioned contract (D9), fetched without credentials, configuration, or network (D6), and carry `effects`, `confirm`, and an output schema. Help output is a rendering for people and stays free to change. A tool with a released contract and no introspection command yet can claim only the `core-behavior` profile under Conformance, and documents in prose what D7 and D8 would carry.
-- **Context from the stdin TTY, the selected stdout format, and `NO_INPUT`.** Terms define the interactive context once. A caller forces the non-interactive context with `--json`, by withholding a TTY on stdin, or with `NO_INPUT` when it cannot change either. Each signal can only force the non-interactive context, so none can contradict a TTY; a tool-defined signal for the same context would let two signals disagree.
+- **Context from the stdin TTY, an explicit machine-readable format, and `NO_INPUT`.** Terms define the interactive context once. A caller forces the non-interactive context with `--json` or another explicitly selected machine-readable format, by withholding a TTY on stdin, or with `NO_INPUT` when it cannot change either. A tool's default format does not force it, so a tool that prints JSON on a TTY by default can still prompt there; a machine caller that runs the tool in a PTY therefore needs an explicit machine-readable format or `NO_INPUT` to suppress prompts, and a human-readable `--format` value does not. Each signal can only force the non-interactive context, so none can contradict a TTY; a tool-defined signal for the same context would let two signals disagree.
 - **Conditional requirements and named extensions, one profile.** Applicability is stated per requirement: Stage R when a command mutates, R7 when work outlives the command that started it, O6 when a collection has no documented finite maximum. An extension names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on: resumable pagination (`continuation`), observable accepted work with controls where cancellation or suspension exists (`managed`). A profile that bundled requirements across stages by choice would let one claim mean many things. The one profile, `core-behavior` under Conformance, does not select requirements: it is this standard with the introspection command and its contract removed, for a tool with a released contract that cannot yet provide them.
 - **`--json`, not `--output`.** `--json` is one flag a caller can pass without knowing the tool's format names. `--output` means a file path in some tools and a format in others, so a caller who sees it cannot tell which.
 - **An open table of error kinds.** Names in the F3 error table keep their meanings everywhere; any other `kind` is tool-defined and unprefixed. A caller acts on the names it knows either way, and a prefix would only cost the tool.
@@ -25,12 +25,13 @@ This section is non-normative. It records the decisions that shape the standard.
 ## Terms
 
 - **Greenfield, brownfield.** These words describe a command path, flag, environment variable, or F3 `kind`, not a tool. It is brownfield when it preserves a released contract and greenfield otherwise. A path added after a tool-wide contract was released inherits that contract and is brownfield with respect to it, and greenfield with respect to everything the path itself introduces. A clause that says greenfield or brownfield applies with respect to the subject it names: the command path, the flag, the variable, or the `kind`.
-- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the selected stdout format is human-readable, and in a non-interactive context otherwise; a non-empty `NO_INPUT` environment variable forces the non-interactive context under I5a. These terms govern prompts and consent; the stream a prompt is written to, interactive sessions, and pagers carry further conditions under I5a, I5b, and I5d.
+- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the call did not select a machine-readable stdout format explicitly, with `--json` or a `--format` value the tool documents as machine-readable; it runs in a non-interactive context otherwise. A non-empty `NO_INPUT` environment variable forces the non-interactive context under I5a. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; the stream a prompt is written to, interactive sessions, and pagers carry further conditions, including their own format conditions, under I5a, I5b, and I5d.
+- **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
 - **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
 - **Introspection command.** The arguments, excluding the program name, that return the D7 index. It is `schema` unless another form is required under D6a.
 - **Caller.** The person or program that runs the tool and consumes its output.
 - **Managed operation.** Work that continues after the command that started it exits.
-- **Reserved field name.** A field name this standard defines with a meaning in success output: `changed`, `cursor`, `has_more`, `items`, `next`, `next_cursor`, `output_file`, `status`, `targets`, and `truncated`.
+- **Reserved field name.** A field name this standard defines with a meaning in success output: `changed`, `cursor`, `has_more`, `items`, `next`, `next_cursor`, `output_file`, `requires_confirmation`, `status`, `targets`, and `truncated`.
 - **Core requirement.** A normative statement in a section before Extensions.
 - **Extension.** A named section under Extensions. An extension is an optional guarantee that a tool enables by declaring its name in D7; its requirements bind only a tool that declares it.
 
@@ -155,7 +156,7 @@ Fields marked `always` in the table below MUST be present. A conditional field M
 | `interactive` | boolean | always | MUST be `true` when any valid call starts an interactive session under I5b and `false` otherwise. |
 | `stream` | boolean | success emits a record stream | MUST be `true`. `output` describes one record; see O7. |
 | `delegates_stdout` | boolean | every successful call writes to stdout only the unmodified stdout of a process the command runs | MUST be `true`. `output` and `stream` MUST NOT be present; see O2b. |
-| `output` | object | success conveys data beyond the exit status, or `changed` is required under R5a | O4 JSON Schema for the success document or one O7 record. MUST declare `changed` as a boolean when R5a requires it. |
+| `output` | object | success conveys data beyond the exit status, or `changed` is required under R5a | O4 JSON Schema for the success document or one O7 record. When R5a requires `changed`, MUST declare it with type `boolean`, or with type `["boolean", "null"]` only when R5a permits `null`. |
 | `exit_codes` | object | adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
 | `format_defaults` | object | differs from tool default | O2 output defaults. |
 | `reserved_overrides` | object | the command retains a reserved field name under O5e | O5e map from each such reserved field name to the name that carries this standard's meaning. |
@@ -449,8 +450,8 @@ This stage covers calls that mutate state or may be repeated. Safeguards follow 
 
 | `effects` | Contract |
 |---|---|
-| `read_only` | The command does not change intended state managed or targeted by the tool. |
-| `idempotent` | The command may change intended state, but repeating a successful call with the same inputs, without an intervening change to the targeted state, MUST succeed without another intended state transition. |
+| `read_only` | The command does not change intended state. |
+| `idempotent` | The command may change intended state, but repeating a successful call with the same inputs, without an intervening change to the targeted state, MUST succeed and MUST leave the intended state as the first call left it. It MUST NOT repeat any other documented effect. Recomputing or rewriting only that same intended state does not violate this guarantee. |
 | `non_idempotent` | The command meets neither preceding guarantee; a repeat may cause another intended effect or return a stable conflict. |
 
 **R1b** The declaration MUST cover every valid call. Declare `non_idempotent` when any call lacks the repeat guarantee. Otherwise declare `idempotent` when any call can change intended state. Otherwise declare `read_only`. A changing response, incidental telemetry, logs, caches, metering, or rate limiting do not alone change the classification.
@@ -459,7 +460,7 @@ For example, a delete by stable identifier whose repeat succeeds with `changed: 
 
 ### R2: Mutation safeguards MUST match the blast radius.
 
-**R2a** A mutation is wide when it can affect existing targets the caller did not name individually. It is irreversible when the tool provides no documented operation that restores the prior state.
+**R2a** A mutation is wide when it can affect existing targets the caller did not name individually. Targets necessarily included by a documented dependency relationship from individually named targets do not by themselves make a mutation wide. It is irreversible when the tool provides no documented operation that restores the prior state.
 
 **R2b** A mutation MUST carry at least the minimum safeguard listed for its operation in the table below; idempotence does not reduce these safeguards.
 
@@ -480,7 +481,9 @@ For example, a delete by stable identifier whose repeat succeeds with `changed: 
 
 **R3c** A `--dry-run` call MUST NOT require `--yes`. A command that accepts `--yes` MUST accept it with `--dry-run` and ignore it.
 
-**R3d** `--yes` confirms a prompt; `--force` overrides a documented precondition. Accepting one MUST NOT enable the other.
+**R3d** `--yes` confirms a prompt; `--force` overrides a documented precondition. Accepting one MUST NOT enable the other. A tool whose released contract uses one flag for both roles MAY retain that behavior as an exception to D4c; it MUST then document, for each command, whether the flag confirms a prompt, overrides a precondition, or does both, and a greenfield command on that tool MAY use the retained flag under the same documentation rule. The name of a flag inherited from an upstream contract the tool does not own does not by itself assign either role; its documented behavior determines whether either role applies.
+
+**R3e** Preview binding: a command for a wide mutation under R2a SHOULD accept `--expect-targets N`, where `N` is a non-negative integer. When the flag is given, the mutating call MUST, before its first side effect, resolve the complete target set by the rules that produce the R4c `targets` array, and MUST fail with `kind` `conflict` before side effects when `N` differs from the number of distinct targets in that set.
 
 A documented precondition that `--force` overrides is not met, so the call fails with an F3 object on stderr and names the override:
 
@@ -500,15 +503,15 @@ $ mytool services prune --env staging --json < /dev/null
 
 **R4a** The command MUST provide `--dry-run`.
 
-**R4b** On any command that accepts it, a `--dry-run` call MUST leave intended state unchanged, SHOULD apply the same permission checks as the mutating call, and MUST fail with the `kind` the mutating call would fail with before side effects, except `confirmation_required`.
+**R4b** On any command that accepts it, a `--dry-run` call MUST leave intended state unchanged, SHOULD apply the same permission checks as the mutating call, and MUST fail with the `kind` the mutating call would fail with before side effects, except that it MUST NOT fail with `confirmation_required`: when every check that precedes the confirmation gate succeeds and the mutating call would then require `--yes`, the `--dry-run` call MUST succeed and reports the gate under R4c.
 
-**R4c** The structured success of a `--dry-run` call MUST conform to the same D8 `output`, list each target the mutating call would affect as observed during that call in an array field `targets`, whose item schema is tool-defined, and return `changed: false`. A value produced only by performing the mutation MUST be omitted or `null`.
+**R4c** The structured success of a `--dry-run` call MUST conform to the same D8 `output`, list each target the mutating call would affect as observed during that call in an array field `targets`, whose item schema is tool-defined, return `changed: false`, and return a boolean `requires_confirmation` that is `true` exactly when the mutating call would require `--yes`. A value produced only by performing the mutation MUST be omitted or `null`.
 
 Preview and mutation share one output schema; this tool also lists `targets` in the mutation's own result, which R4c does not require:
 
 ```console
 $ mytool services prune --env staging --dry-run --json
-{"targets":["api","worker"],"changed":false}
+{"targets":["api","worker"],"changed":false,"requires_confirmation":true}
 
 $ mytool services prune --env staging --yes --json
 {"targets":["api","worker"],"changed":true}
@@ -516,7 +519,7 @@ $ mytool services prune --env staging --yes --json
 
 ### R5: Mutating commands MUST report what happened.
 
-**R5a** Every command whose `effects` is not `read_only` MUST return a boolean `changed` in every structured success response; D8 `output` declares it. A command that D8 declares `delegates_stdout: true` has no structured success response and is exempt. `changed` reports whether this call caused a new intended state transition, not whether background work completed.
+**R5a** Every command whose `effects` is not `read_only` MUST return `changed` in every structured success response; the D8 `output` row declares its type. A command that D8 declares `delegates_stdout: true` has no structured success response and is exempt. `changed` reports whether this call caused a new intended state transition, not whether background work completed, and is a boolean except under the following condition. When the tool cannot observe whether a transition occurred without an additional read it would not otherwise perform, the command MUST return `null` in that case and MUST document the condition; `null` means the tool did not observe, not that nothing changed.
 
 **R5b** When authoritative state reports a concurrent conflict, the tool MUST fail with `kind` `conflict` and MUST NOT silently overwrite it.
 
@@ -717,6 +720,8 @@ Failures need a stable machine signal and enough information for the caller to c
 | `1` | Generic failure. |
 | `2` | Usage error. |
 
+A command whose documented result is one predicate (a yes-or-no answer about existing state, such as whether a unit is active or whether two files have no differences) MAY document one additional non-zero code for a false answer under F1c and F1d. For that command, exit `0` MUST mean true and the additional code MUST mean false. Both answers are successful outcomes: F2 and F3 do not apply, and F1b's postcondition is that the answer was determined.
+
 **F1b** Exit `0` MUST mean the command observed its documented postcondition through the interface it used. Independent re-verification is not required. For a command that returns after acceptance, acceptance falls under R7; completion falls under R7c when the initiating command waits and, under `managed`, under M1.
 
 **F1c** Additional codes MUST each have one stable meaning. Fine-grained failures MUST use F3 `kind` instead.
@@ -825,6 +830,7 @@ A person at the terminal should find familiar flag names, standard environment b
 | Override a documented precondition | `--force` | `-f` | R3 |
 | Confirm a prompt | `--yes` | `-y` | R3 |
 | Preview a mutation | `--dry-run` | `-n` | R4 |
+| Bind consent to a previewed target count | `--expect-targets N` | No recommendation | R3 |
 | Keep a repeat from duplicating its effect | `--idempotency-key KEY` | No recommendation | R5 |
 | Select JSON or NDJSON output | `--json` | No recommendation | O2 |
 | Select a named format | `--format NAME` | No recommendation | O2 |
@@ -964,7 +970,7 @@ A caller that holds an identifier under R7 can learn the current state of the wo
 
 **M1b** Results: structured results from both commands MUST contain `status` and the identifier under the same field name. The F3 object of a wait that fails after argument parsing MUST carry the identifier and `status` in `context`; `status` is the last observed state, or `null` when no state was observed, including under M1d `not_found`.
 
-**M1c** Status values: the status command's D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists; the wait command's success schema MUST declare `status` as an enum listing only the values its success can carry under M1e; other terminal values appear in `context.status` of its F3 object. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail with the applicable `kind` and MUST NOT return `unknown`.
+**M1c** Status values: in M1, M2, and M3, each reference to `status`, including a field in F3 `context` or in a collection item, means `status` or the name the applicable command maps from `status` under O5e; a command with that mapping MUST use the mapped name at every such location. The status command's D8 output schema MUST declare `status` as a finite enum containing terminal values `succeeded` and `failed`, plus `canceled` when cancellation exists; the wait command's success schema MUST declare `status` as an enum listing only the values its success can carry under M1e; other terminal values appear in `context.status` of its F3 object. It MAY add values for unfinished states and MUST add `unknown` when an existing operation's current state can be indeterminate. `unknown` MAY be returned only when the tool successfully observes an underlying state that explicitly represents indeterminacy. A timeout, transport error, or other failure to read state MUST fail with the applicable `kind` and MUST NOT return `unknown`.
 
 **M1d** Identifiers: any retention or expiry policy for managed operations MUST be documented. An unrecognized or expired identifier MUST fail with `kind` `not_found` and MUST NOT be reported as an operation state.
 

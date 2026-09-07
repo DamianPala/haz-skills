@@ -15,6 +15,27 @@ A candidate requirement must satisfy P1-P6 before it enters the standard.
 
 A candidate extension name enters the standard only when it names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on without inspecting each command. A guarantee a caller can only use after reading command detail stays a conditional requirement.
 
+A new reserved field name or `kind` MUST be a multi-word `snake_case` name; a new reserved flag MUST be a multi-word kebab-case long name under H1a. A draft.6 audit of output fields from AWS service models, `gh`, and npm found collisions among the reviewed single-word candidates and none among the multi-word `snake_case` candidates the standard reserved.
+
+## Three kinds of requirement
+
+A requirement that most unrelated tools already satisfy without having read this document records a convergence, and the convergence is its justification. A requirement no such tool satisfies and none contradicts is an addition; it may be right, and it carries an adoption cost that a convergence does not. A requirement several unrelated tools independently decided against needs an argument beyond this document's internal consistency. The kinds are not labels in the standard; this section records how requirements scored when checked against real tools.
+
+Checked in draft.6 against five existing tools used as external comparators (`gh`, `git`, `npm`, `systemctl`, `aws`):
+
+- Convergences (four or five of five satisfy): I2a, I2b, I2c, I4b, I6c, I6d, O1, O8 (its behavioral half), and H2. I2b is the strongest case: three unrelated tools document the same precedence of flags over environment over configuration.
+- Additions (none of five satisfies, none contradicts): the `--timeout` requirement in I8b, retained; the audit found no `--timeout` on waiting commands in the five reviewed interfaces. The verbose-liveness recommendation added to I8b in draft.6 is a separate addition, not yet scored.
+- Decided against by several tools, and what draft.6 did: R3d (five of five use one flag for both roles; relaxed for released contracts), O2b (five of five have commands whose stdout is not a document they own; `delegates_stdout` added), O2c (disputed in both directions: one tool defends its released non-TTY default, another reports that the TTY-default recommendation would make its tool worse; the accommodation now reaches tools without introspection through the `core-behavior` profile), O6b and O6c (no tool returns collections in the O6c shape; not resolved, see Known limits).
+
+## Known limits
+
+Shapes the conformance claim cannot express in this version, each seen in one real tool:
+
+- A unit of effect smaller than a command, such as a subcommand whose argument shape decides whether it mutates (`npm version` versus `npm version patch`). R1 classifies the whole command as `non_idempotent`, so its read-only invocation inherits that declaration.
+- A suite of binaries sharing one flag vocabulary (`systemctl` and the other `*ctl` tools). Each binary claims on its own.
+- A claim per upstream service inside one tool (`aws`). `scope` covers command-path prefixes, which matches services only where the path does.
+- A collection returned in an upstream shape without a boolean equivalent to `has_more` (`aws` `NextToken`). O5e can map a reserved name only when that name already collides, and it cannot supply a missing meaning, so such a command stays outside the claim.
+
 ## Document policy
 
 The standard stays short. Text that neither states a requirement, nor resolves an ambiguity in one, nor shows one working belongs elsewhere or nowhere. Design principles is the one non-normative section and stays short.
@@ -35,6 +56,7 @@ Run these checks from the `haz-skills` repository root:
 
 - `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, reads requirement IDs from `### ID:` headings and verifies they are unique and in stage order, reads clause markers (`**R3c**` at the start of a paragraph) and verifies they belong to the enclosing requirement and run without gaps, rejects unresolved references to requirement or clause IDs, verifies that every `"standard"` value in examples equals the version in the header, and rejects em dashes, trailing whitespace, and indented table rows. It prints `file:line` for each problem and exits `1` when any check fails.
 - `git diff --check` detects whitespace errors in the change itself.
+- Read every clause the `core-behavior` profile retains that names a D7 or D8 field, and confirm that it states the behavior independently and that any declaration duty it carries can be satisfied by the prose substitute in Conformance. The profile excludes D6, D7, D8, D9a, and the introspection references Conformance names, so a declaration duty that leaks into another stage silently changes what the profile requires. This check is manual.
 - `pandoc -f gfm -t html cli-design/references/cli-design-standard.md -o /tmp/cli-design-standard.html` renders the document for inspection.
 
 The script checks document invariants only. Conformance of a tool against the standard is not automated.

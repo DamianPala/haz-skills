@@ -116,7 +116,7 @@ The same call under `--json` carries it as `next`:
 
 **D6d** Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return D8 detail. A command path's segments are the parts of D7 `commands[].name` split on U+0020; each segment MUST be passed as a separate argument in that order. A tool with exactly one command and no command path MUST list that command with `name` `""` and include its D8 detail as D7 `command`. In that case, any argument after the introspection command is an unknown path.
 
-**D6e** Errors: an unknown path MUST be a usage error and name the nearest valid paths, if any.
+**D6e** Errors: an unknown path MUST be a usage error and name the nearest valid paths, if any. When the unknown path is a prefix of valid paths, those paths are the nearest. The error MUST NOT list every path in the index as the nearest.
 
 ### D7: The introspection index MUST let callers choose a command safely.
 
@@ -742,7 +742,7 @@ Run: mytool images list web
 | `retryable` | MAY | Boolean; see F3b. |
 | `action` | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
 | `hint` | SHOULD | String recovery step; see F3b. |
-| `context` | MAY | Object containing machine-readable values needed for recovery. |
+| `context` | MAY | Object containing machine-readable values needed for recovery. R7a, R7c, M1b and F4a require it for the failures they name. |
 
 **F3b** `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess.
 

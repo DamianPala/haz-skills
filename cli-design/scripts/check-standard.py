@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_FILE = Path("cli-design/references/cli-design-standard.md")
-STAGES = "DIROFHCM"
+STAGES = "DIROFHBCM"
 ID_DEFINITION = re.compile(r"^### ([A-Z][0-9]+):")
 ID_TOKEN = re.compile(r"(?<![A-Za-z0-9+])([A-Z][0-9]+)(?![A-Za-z0-9])")
 CLAUSE_MARKER = re.compile(r"^\*\*([A-Z][0-9]+)([a-z])\*\* ")

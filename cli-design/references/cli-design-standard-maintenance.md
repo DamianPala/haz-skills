@@ -32,6 +32,8 @@ Shapes the conformance claim cannot express in this version, each seen in one re
 
 The standard stays short. Text that neither states a requirement, nor resolves an ambiguity in one, nor shows one working belongs elsewhere or nowhere. Design principles is the one non-normative section and stays short.
 
+Accommodations for released contracts live under Existing tools. A requirement elsewhere states the baseline and carries no brownfield qualifier; what a released path may keep is a row or clause in that section, not a condition in the requirement.
+
 Requirement and clause identifiers are scoped to a version of this document: after inserting, splitting, or removing a clause, later clauses are relettered in reading order and internal references are updated; an external citation names the version.
 
 ## Change workflow
@@ -48,7 +50,6 @@ Run these checks from the `haz-skills` repository root:
 
 - `uv run --no-project python cli-design/scripts/check-standard.py` parses every fenced `json` block, reads requirement IDs from `### ID:` headings and verifies they are unique and in stage order, reads clause markers (`**R3c**` at the start of a paragraph) and verifies they belong to the enclosing requirement and run without gaps, rejects unresolved references to requirement or clause IDs, verifies that every `"standard"` value in examples equals the version in the header, and rejects em dashes, trailing whitespace, and indented table rows. It prints `file:line` for each problem and exits `1` when any check fails.
 - `git diff --check` detects whitespace errors in the change itself.
-- Read every clause the `core-behavior` profile retains that names a D7 or D8 field, and confirm that it states the behavior independently and that any declaration duty it carries can be satisfied by the prose substitute in Conformance. The profile excludes D6, D7, D8, D9a, and the introspection references Conformance names, so a declaration duty that leaks into another stage silently changes what the profile requires. This check is manual.
 - `pandoc -f gfm -t html cli-design/references/cli-design-standard.md -o /tmp/cli-design-standard.html` renders the document for inspection.
 
 The script checks document invariants only. Conformance of a tool against the standard is not automated.

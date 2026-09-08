@@ -88,7 +88,7 @@ By tool shape:
 
 ## Stage D: Discovery and introspection
 
-A caller should be able to choose a command and construct a valid call without reading source code or probing commands that may change state.
+What a tool publishes about itself and what it does at runtime are one contract: the agreement rule (D1) holds help (D3) and the introspection output (D6 to D9) to actual behavior. Names (D4) and breadcrumbs (D5) make the next call guessable. Discovery has layers (D2); shipped guidance is the layer that adds context and does not repeat the catalogs (D10).
 
 ### D1: Published interfaces MUST match actual behavior.
 
@@ -537,6 +537,8 @@ For example, a delete by stable identifier whose repeat succeeds with `changed: 
 
 ### R3: Safety gates MUST fail closed and be discoverable.
 
+Four things decide a gate: whether the call may prompt at all, under the prompt policy (I5a); what a *gated call* does when it cannot prompt or the prompt is declined, and when the gate is reached (R3b); what `--dry-run` changes (R3c), with the preview's report (R4c); and how `--yes` differs from `--force` (R3d).
+
 **R3a** Every command that can require `--yes`, including those required under R2b, MUST accept `--yes`; the D8 `confirm` field carries the declaration.
 
 **R3b** A *gated call* that cannot prompt under I5a, or whose prompt is declined, MUST stop before side effects and fail with `kind` `confirmation_required`, naming `--yes`. The gate applies after every check the call performs before side effects: a call that would fail before reaching the gated effect, such as on a missing target, MUST fail with that `kind` without requiring `--yes`.
@@ -605,6 +607,8 @@ A tool that retries requests internally MUST retry only failures that would be r
 
 ### R7: Accepted work MUST remain identifiable.
 
+For an *accepting call*, two clauses set the basics: the identifier (R7a) and the meaning of exit `0` (R7b). A command that offers both waiting and returning after acceptance has a clause of its own (R7c), and so does the failure of a call that waits (R7d). Observing and controlling the work after the call exits falls, where claimed, under the `managed` extension (M1 to M3).
+
 **R7a** An *accepting call* MUST return a non-empty canonical identifier in structured success output. Its field name is tool-defined but MUST remain consistent across the command that starts the work and every command that addresses it; in M1-M3, "the identifier" means that value under the same field name. If the command that starts the work fails after obtaining the identifier, any F3 object it emits MUST carry the identifier in `context` under the same field name.
 
 **R7b** Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and MUST NOT later resolve to a different entity. The tool SHOULD document how a caller observes the work, and when a wait command exists, the identifier's D5 breadcrumb SHOULD name it.
@@ -627,13 +631,15 @@ $ mytool deployments wait dep_123 --json
 
 ## Stage O: Output
 
-A caller should be able to select a representation before execution, parse stdout without filtering diagnostics, and consume large results without mistaking one page for the whole result.
+Three things are decided separately for stdout: which format it uses (O2); what shape the result takes in that format, a schema-backed document (O4, O5), a bounded collection (O6), or a record stream (O7); and how it travels, on streams classified one by one (O1), with distinct roles (O3), and with a closed pipe survived without noise (O8).
 
 ### O1: The standard streams MUST be classified independently.
 
 The TTY state of stdin is one input to the prompt policy under I5a, stdout controls the default format under O2c, and stderr controls diagnostic decoration under O3b and whether F2 requires the structured error object. Redirecting one stream does not change how another is classified.
 
 ### O2: Output format selection MUST be explicit and predictable.
+
+Which format stdout uses is settled by four clauses together: the declared defaults (O2a), the flag every command takes (O2b), the default when no flag is given (O2c), and precedence between flag and default (O2d). Two situations have clauses of their own: a destination file (O2e) and delegated stdout (O2f).
 
 **O2a** Declaration: D7 `format_defaults` MUST declare `tty` and `non_tty` format names. D8 `format_defaults` MUST appear only when a command differs from those tool-wide defaults. For a *stream command* the machine-readable format name is `ndjson`; that implied name does not by itself make the command differ from the tool-wide defaults.
 
@@ -797,7 +803,7 @@ When a downstream reader closes a pipe, a command that has not otherwise failed 
 
 ## Stage F: Failure
 
-Failures need a stable machine signal and enough information for the caller to choose its next action. Success must not hide incomplete or uncertain work.
+A failure has two faces: what the process reports through its exit status (F1), and what happened to the operation, which may be unknown, partial, or interrupted (F4, F5). The error object carries the second to the caller: where it is emitted (F2) and what it contains (F3).
 
 ### F1: Exit codes MUST be stable and documented.
 
@@ -818,6 +824,8 @@ Failures need a stable machine signal and enough information for the caller to c
 **F1e** D8 command `exit_codes` MUST appear only when they add a code or refine a tool-wide description without changing its meaning.
 
 ### F2: Structured errors MUST have one location.
+
+The meaning of failing with a `kind` is fixed in Terms; these clauses say where the error goes: which stream carries the diagnostics (F2a), when the object is required (F2b), and on which stream and line the object sits (F2c), in the structured error envelope (F3).
 
 **F2a** When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object. The meaning of fail with a `kind` is defined in Terms.
 
@@ -979,7 +987,7 @@ scheduler
 
 ## Existing tools
 
-This section is the brownfield path. A tool with a released contract can adopt this standard without breaking its callers. Requirements outside this section remain applicable except where this section states what released behavior may be kept. This section defines those exceptions and how the tool declares them, so that a caller reading the D7 index knows what the claim covers.
+This section is the brownfield path. A tool with a released contract can adopt this standard without breaking its callers. Requirements outside this section remain applicable except where this section states what released behavior may be kept. This section defines those exceptions and how the tool declares them, so that a caller reading the D7 index knows what the claim covers. It builds on the conformance claim (D7) and command detail (D8), and its terms, *introspection command* and *reserved field name*, are defined in the core.
 
 ### B1: Released behavior MAY be kept where changing it would break callers.
 
@@ -1051,7 +1059,7 @@ The two extensions below bind a tool that names them in D7 `conformance.extensio
 
 ## Extension `continuation`: Bounded reads MUST be resumable.
 
-A caller that received one page or one run of records can continue from where it stopped without repeating or skipping items.
+A caller that received one page or one run of records can continue from where it stopped without repeating or skipping items. It builds on the bounds of collections (O6) and streams (O7); its terms, *stream command* and failing with a `kind`, are defined in the core.
 
 ### C1: Collections MUST page by opaque cursor.
 
@@ -1129,7 +1137,7 @@ Non-normative note: cursor-based resume guarantees a continuation position, not 
 
 ## Extension `managed`: Accepted work MUST be observable.
 
-A caller that holds an identifier under R7 can learn the current state of the work, wait for its terminal state, and, where the tool offers them, cancel or suspend it.
+A caller that holds an identifier under R7 can learn the current state of the work, wait for its terminal state, and, where the tool offers them, cancel or suspend it. It builds on accepted work (R7) and wait deadlines (I8), and its terms, *managed operation*, *accepting call*, and *non-interactive context*, are defined in the core.
 
 ### M1: Managed work MUST expose status and wait.
 

@@ -209,96 +209,64 @@ $ mytool schema
   "schema_version": "1",
   "tool_version": "2.1.0",
   "global_flags": [
-    {
-      "name": "json",
-      "description": "Emit JSON output",
-      "type": "boolean",
-      "required": false,
-      "default": false
-    },
-    {
-      "name": "verbose",
-      "description": "Show diagnostic details",
-      "type": "boolean",
-      "required": false,
-      "default": false
-    }
+    {"name": "json", "description": "Emit JSON output", "type": "boolean",
+     "required": false, "default": false}
   ],
   "format_defaults": {"tty": "text", "non_tty": "json"},
   "exit_codes": {"0": "success", "1": "failure", "2": "usage error"},
   "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.6", "extensions": []},
   "commands": [
-    {"name": "deploy", "description": "Deploy a service", "effects": "non_idempotent"},
+    {"name": "services get", "description": "Get a deployed service", "effects": "read_only"},
     {"name": "services list", "description": "List deployed services", "effects": "read_only"}
   ]
 }
 ```
 
-`services list` is one entry with two segments, fetched as `mytool schema services list`.
+`services get` is one entry with two segments, fetched as `mytool schema services get` (D6d):
 
 ```console
-$ mytool schema deploy
+$ mytool schema services get
 ```
 
 ```json
 {
-  "name": "deploy",
-  "description": "Deploy a service to an environment and return after acceptance",
-  "args": [
-    {
-      "name": "service",
-      "description": "Service to deploy",
-      "type": "string",
-      "required": true
-    }
-  ],
-  "flags": [
-    {
-      "name": "env",
-      "description": "Target environment",
-      "type": "string",
-      "required": true,
-      "enum": ["dev", "staging", "prod"]
-    },
-    {
-      "name": "manifest",
-      "description": "Manifest file or - for stdin",
-      "type": "string",
-      "required": false,
-      "accepts_stdin": true
-    },
-    {
-      "name": "yes",
-      "description": "Confirm the deployment",
-      "type": "boolean",
-      "required": false,
-      "default": false
-    }
-  ],
-  "effects": "non_idempotent",
-  "confirm": true,
+  "name": "services get",
+  "description": "Get a deployed service",
+  "args": [{"name": "service", "description": "Service name", "type": "string", "required": true}],
+  "flags": [{"name": "env", "description": "Environment to read", "type": "string",
+             "required": true, "enum": ["dev", "staging", "prod"]}],
+  "effects": "read_only",
+  "confirm": false,
   "interactive": false,
   "output": {
     "type": "object",
-    "required": ["deployment_id", "status", "changed"],
+    "required": ["name", "env", "replicas"],
     "properties": {
-      "deployment_id": {"type": "string"},
-      "status": {
-        "type": "string",
-        "enum": ["queued", "running"]
-      },
-      "changed": {"type": "boolean"},
-      "warning": {"type": "string"},
-      "next": {
-        "type": "array",
-        "items": {"type": "string"}
-      }
+      "name": {"type": "string"},
+      "env": {"type": "string", "enum": ["dev", "staging", "prod"]},
+      "replicas": {"type": "integer"}
     }
   }
 }
 ```
 
-`deploy` inherits tool-wide exit codes and format defaults, so it omits both fields.
+A valid call and its result:
+
+```console
+$ mytool services get api --env prod --json
+{"name":"api","env":"prod","replicas":3}
+```
+
+In the call, `api` and `--env prod` fill the detail's required argument and enumerated flag (I1a); `--json` picks the format explicitly (O2b), so the declared defaults do not apply to this call (O2d); the stdout document conforms to the `output` schema (O4a, O5a).
+
+```console
+$ mytool services get api --env qa --json
+{"error":{"kind":"invalid_input","message":"services get: invalid env 'qa'","hint":"Use --env dev, staging, or prod"}}
+$ echo $?
+2
+```
+
+The invalid enum value is a usage error (I6a) with exit `2` (F1a); under `--json` the error object is required (F2b), sits on stderr as the last non-empty line and not on stdout (F2c), and follows the error envelope (F3a, F3b).
 
 A tool with one unnamed command has no command path, so its index carries the detail:
 

@@ -24,7 +24,7 @@ This section is non-normative. It records the decisions that shape the standard.
 
 Italics mark a term defined in this section.
 
-- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the call did not select a machine-readable stdout format explicitly, with `--json` or a `--format` value the tool documents as machine-readable; it runs in a non-interactive context otherwise. A non-empty `NO_INPUT` environment variable forces the non-interactive context under I5a. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; a prompt written to the command's own streams goes to a stream that is a TTY under I5a, and an interactive session or a pager requires a *terminal context* under I5b and I5d.
+- **Interactive context, non-interactive context.** A call runs in a non-interactive context if stdin is not a TTY, if the call explicitly selects a machine-readable stdout format with `--json` or a `--format` value the tool documents as machine-readable, or if `NO_INPUT` is non-empty (I5a). Otherwise it runs in an interactive context. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; a prompt written to the command's own streams goes to a stream that is a TTY under I5a, and an interactive session or a pager requires a *terminal context* under I5b and I5d.
 - **Terminal context.** A call runs in a terminal context when it runs in an *interactive context*, stdout is also a TTY, and the selected stdout format is human-readable.
 - **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
 - **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
@@ -64,7 +64,7 @@ The non-normative [maintenance guide](cli-design-standard-maintenance.md) define
 
 ## How to read this standard
 
-This section is not part of conformance. Whether a requirement applies is decided by that requirement's own condition, never by this section; the tables below say where to start and which sections to read. The core is this document up to the end of Stage H; Existing tools and the two extensions follow it, and each says when it applies.
+This section is not part of conformance. Whether a requirement applies is decided by that requirement's own condition, never by this section; the tables below say where to start and which sections to read. For a new tool, start with the sections through Stage H. Existing tools and the two extensions follow, and each says when it applies.
 
 By goal:
 
@@ -511,7 +511,7 @@ Four things decide a gate: whether the call may prompt at all, under the prompt 
 
 **R3a** Every command that can require `--yes`, including those required under R2b, MUST accept `--yes`; the D8 `confirm` field carries the declaration.
 
-**R3b** A *gated call* that cannot prompt under I5a, or whose prompt is declined, MUST stop before side effects and fail with `kind` `confirmation_required`, naming `--yes`. The gate applies after every check the call performs before side effects: a call that would fail before reaching the gated effect, such as on a missing target, MUST fail with that `kind` without requiring `--yes`.
+**R3b** A *gated call* that cannot prompt under I5a, or whose prompt is declined, MUST stop before side effects and fail with `kind` `confirmation_required`, naming `--yes`. The gate applies after every check the call performs before side effects. A call that would fail before reaching the gated effect, such as on a missing target, MUST fail with the `kind` for that earlier failure without requiring `--yes`.
 
 **R3c** A `--dry-run` call MUST NOT require `--yes`. A command that accepts `--yes` MUST accept it with `--dry-run` and ignore it.
 
@@ -540,12 +540,19 @@ $ mytool services prune --env staging --json < /dev/null
 **R4b** On any command that accepts it, a `--dry-run` call MUST leave intended state unchanged and follow these outcome rules:
 
 - In all cases, never fail with `confirmation_required` (R3c).
-- For any failure other than a permission check that the mutating call would encounter before side effects, fail with the mutating call's `kind`.
+- If the mutating call would fail before side effects for a reason other than a permission check, fail with the mutating call's `kind`.
 - For a permission check the preview performs and that fails, fail with the mutating call's `kind`.
 - Otherwise succeed, reporting the gate under R4c.
 - The call SHOULD apply the same permission checks as the mutating call; an omitted permission check does not require predicting its result.
 
-**R4c** The structured success of a `--dry-run` call MUST conform to the same D8 `output`, list each target the mutating call would affect as observed during that call in an array field `targets`, whose item schema is tool-defined, return `changed: false`, and return a boolean `requires_confirmation` that is `true` exactly when the same call without `--dry-run` and without `--yes` is a *gated call* in a *non-interactive context*. A value produced only by performing the mutation MUST be omitted or `null`, so the shared schema declares it as optional or nullable.
+**R4c** The structured success of a `--dry-run` call MUST do all of the following:
+
+- conform to the same D8 `output`;
+- list each target the mutating call would affect as observed during that call in an array field `targets`, whose item schema is tool-defined;
+- return `changed: false`;
+- return a boolean `requires_confirmation` that is `true` exactly when the same call without `--dry-run` and without `--yes` is a *gated call* in a *non-interactive context*.
+
+A value produced only by performing the mutation MUST be omitted or `null`, so the shared schema declares it as optional or nullable.
 
 Preview and mutation share one output schema; this tool also lists `targets` in the mutation's own result, which R4c does not require:
 
@@ -686,6 +693,8 @@ Example schema:
 }
 ```
 
+Non-normative example: in this schema, `progress` is required but nullable, while `warnings` is optional and accepts an array when present. `{"job_id":"job_123","status":"running","progress":null}` matches the schema. Omitting `progress` does not; adding `"warnings":null` does not either. An omitted field and a field containing `null` are different JSON shapes.
+
 ### O5: JSON output MUST match its declared contract.
 
 **O5a** Document: a `--json` success of a *document command* MUST contain exactly one JSON value conforming to its D8 `output` schema, encoded as UTF-8 and followed by LF. A failed document call MUST NOT write a JSON value to stdout.
@@ -745,13 +754,23 @@ $ mytool jobs list --limit 2 --json
 }
 ```
 
+Non-normative example: assume one tool exposes both commands and does not claim `continuation`. `regions list` documents a maximum of three regions and returns all configured regions, here `["east","west"]`; O6b does not require `--limit` for this command. `jobs list` has two matching jobs today but no documented finite maximum. It accepts `--limit` and uses a finite default limit of 100, so its page is `{"items":[{"id":"job_1"},{"id":"job_2"}],"has_more":false}`. The current item count is not a documented maximum.
+
 ### O7: Record streams MUST be bounded and framed.
 
 This requirement applies to a *stream command*.
 
 **O7a** Framing: `--json` MUST emit UTF-8 NDJSON with one complete JSON object per LF-terminated line and no blank lines. Each record MUST conform to D8 `output` and become readable before the command waits for another record or exits. Each record keeps its declared value types without silent truncation (O5b), its timestamp form (O5d), and its field stability across compatible versions (D9).
 
-**O7b** Window: without `--follow`, the command MUST terminate. A stream without a documented finite maximum MUST use a finite default window and accept at least one of `--limit`, `--head`, or `--tail`. `--limit N` is the maximum number of records emitted from the selected position in the documented order; it does not select that position. `--head N` selects the first N matching records and `--tail N` selects the last N matching records. A command MAY accept any subset of these flags. Its D8 descriptions MUST state the default window and how each accepted selector combines with `--follow`; unsupported combinations are usage errors under I6a. `--follow`, an unbounded mode selected explicitly under I8c, removes the default window when offered. An explicit `--limit` remains effective with or without `--follow` and ends the read after N records. Reaching a finite window that ends the read does not end the record source.
+**O7b** Window rules:
+
+- Without `--follow`, the command MUST terminate.
+- A stream without a documented finite maximum MUST use a finite default window and accept at least one of `--limit`, `--head`, or `--tail`.
+- `--limit N` is the maximum number of records emitted from the selected position in the documented order; it does not select that position.
+- `--head N` selects the first N matching records and `--tail N` selects the last N matching records. A command MAY accept any subset of `--limit`, `--head`, and `--tail`.
+- Its D8 descriptions MUST state the default window and how each accepted selector combines with `--follow`; unsupported combinations are usage errors under I6a.
+- `--follow`, an unbounded mode selected explicitly under I8c, removes the default window when offered. An explicit `--limit` remains effective with or without `--follow` and ends the read after N records.
+- Reaching a finite window that ends the read does not end the record source.
 
 **O7c** Ordering: the stream MUST use a stable, documented order and MUST NOT stop before a finite window that ends the read while matching records are available.
 
@@ -813,6 +832,17 @@ $ mytool deploy api --env prod --yes
 Error: Cannot deploy 'api': image 'web:v2.1.0' was not found
 Run: mytool images list web
 ```
+
+Non-normative example: assume `services get` is a document command with `format_defaults` of `{"tty":"text","non_tty":"json"}`. Each call below fails to find `missing`. All streams are TTYs unless redirected, and `NO_INPUT` is unset except where shown.
+
+| Call | Context for prompting | Selected stdout format | F3 error object |
+|---|---|---|---|
+| `mytool services get missing --json` | Non-interactive | `json` | Required on stderr |
+| `NO_INPUT=1 mytool services get missing` | Non-interactive | `text` | May be omitted |
+| `mytool services get missing < /dev/null` | Non-interactive | `text` | May be omitted |
+| `mytool services get missing 2>error.log` | Interactive | `text` | Required in `error.log` |
+
+The final row places the object on the last non-empty line of `error.log`. `NO_INPUT` changes the prompting context without changing the selected stdout format.
 
 ### F3: Structured errors MUST have a stable envelope.
 
@@ -967,6 +997,8 @@ This section is the brownfield path. A tool with a released contract can adopt t
 
 **B1b** A brownfield path MAY preserve established behavior when changing it would break existing callers. Behavior that B3 or B4 lets the path keep does not affect the claim; any other retained behavior that violates a requirement makes the command incompatible, and B2 places it outside the claim. A tool that retains an incompatible command SHOULD also provide a documented conforming path for the same operation.
 
+Non-normative example: a tool has a released, tool-wide `--output PATH` contract. A new `reports export` command inherits that contract, so it can retain that destination flag under B3's O2e row. The same command introduces an archive-mode option with no released name; it uses `--archive-mode` under the canonical flag-name rule (H1a). The new command is brownfield with respect to the inherited destination flag and greenfield with respect to its new option.
+
 ### B2: The claim MUST exclude incompatible retained commands.
 
 **B2a** A retained incompatible command MUST carry `conforming: false` in its D7 entry, and its retained behavior MUST be documented. Omitted, `conforming` means `true`; a marked entry still carries the required entry fields under D7b. A retained `--json` that requires a value is such a command; it conforms once bare `--json` selects the D8 `output` document.
@@ -1105,6 +1137,17 @@ $ mytool logs job_123 --after-cursor cur_103 --follow --json
 {"cursor":"cur_104","timestamp":"2026-08-15T10:00:09Z","level":"info","message":"Recovered"}
 ```
 
+Non-normative example: assume another `logs` stream command declares `continuation` and accepts `--after-cursor`, `--limit`, `--tail`, and `--follow`. It documents chronological order, with `--tail N` selecting the final N records available when the read starts, and accepts `--follow` together with `--after-cursor` and `--limit`. The opaque cursor `cur_a7` identifies record 40; the matching records available when each read starts are 1 through 100. All calls below use the same source, filters, and order, and no failure or deadline interrupts the valid reads.
+
+| Call | Result |
+|---|---|
+| `mytool logs job_123 --tail 2 --json` | Records 99 and 100, then exit `0`. |
+| `mytool logs job_123 --after-cursor cur_a7 --limit 20 --json` | Records 41 through 60, then exit `0`. |
+| `mytool logs job_123 --after-cursor cur_a7 --limit 20 --follow --json` | Records 41 through 60, then exit `0`; the explicit limit still ends the read. |
+| `mytool logs job_123 --after-cursor cur_a7 --tail 2 --json` | Exit `2`, with `invalid_input` in the F3 object on the last non-empty stderr line. Selecting only 99 and 100 would skip records 41 through 98. |
+
+The successful reads end without ending the record source. The cursor selects the continuation position; `--limit` supplies the record budget. The rejected call's row specifies the error, not whether stdout contains earlier records.
+
 Non-normative note: cursor-based resume guarantees a continuation position, not exactly-once delivery. Persisting a cursor only after processing its record minimizes replay; a crash before that checkpoint may cause the record to be received again.
 
 ## Extension `managed`: Accepted work MUST be observable.
@@ -1138,6 +1181,17 @@ A caller that holds an identifier under R7 can learn the current state of the wo
 - A wait failure that names an existing operation SHOULD give, as its F3b `hint`, a concrete status or log invocation when that invocation can advance recovery; other failures follow F3b without a wait-specific `hint` requirement.
 
 **M1f** Listing: the tool SHOULD provide a command, usable in a *non-interactive context*, that lists managed operations with the identifier and `status`; its result is a bounded collection under O6.
+
+Non-normative example: assume a tool declares `managed`, uses `job_id` for the operation identifier, and exposes document commands `jobs status` and `jobs wait`. It uses the F1a exit codes and reports `unavailable` when its backend transiently rejects a state read. Its status schema includes `unknown` because the backend can explicitly report an indeterminate state. Each row is independent; error rows describe fields in the F3 object on the last non-empty stderr line, with no JSON success value on stdout.
+
+| Call | Observation | Result |
+|---|---|---|
+| `mytool jobs status job_123 --json` | The backend reports an explicitly indeterminate state. | Exit `0`; stdout contains `{"job_id":"job_123","status":"unknown"}`. |
+| `mytool jobs status job_123 --json` | The backend transiently rejects the state read. | Exit `1`; error `kind` is `unavailable`. |
+| `mytool jobs wait job_123 --timeout 5s --json` | The last observed state is `running` when the wait deadline expires. | Exit `1`; error `kind` is `timeout`, with `context: {"job_id":"job_123","status":"running"}`. The wait does not stop the job. |
+| `mytool jobs wait missing --json` | The identifier is unrecognized; no state was observed. | Exit `1`; error `kind` is `not_found`, with `context: {"job_id":"missing","status":null}`. |
+
+Here `unknown` is an observed operation state, `null` records the absence of an observed state, and `timeout` describes the wait command's failure rather than a terminal job state.
 
 ### M2: Cancellation MUST be honest.
 

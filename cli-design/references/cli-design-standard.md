@@ -62,6 +62,30 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted 
 
 The non-normative [maintenance guide](cli-design-standard-maintenance.md) defines the admission policy and verification workflow for changes to this standard. It is not part of conformance.
 
+## How to read this standard
+
+This section is not part of conformance. Whether a requirement applies is decided by that requirement's own condition, never by this section; the tables below say where to start and which sections to read. The core is this document up to the end of Stage H; Existing tools and the two extensions follow it, and each says when it applies.
+
+By goal:
+
+| Goal | Where to start | Sections to read |
+|---|---|---|
+| Implement a new tool | Scope and Terms, then the stages in order; the introspection contracts (D7, D8) are what the later stages fill in | Core |
+| Audit a conformance claim | Conformance, then the D7 `conformance` field, then D8 for each covered command | Core; Existing tools; each claimed extension |
+| Look up a flag name, a D8 field, or a `kind` | H1b, D8, F3c | Stage H, Stage D, Stage F |
+| Adopt a tool with a released contract | Existing tools, B1 to B4, before anything else, then as for a new tool | Existing tools, then core |
+
+By tool shape:
+
+| Tool shape | What the shape adds to the core, and what it sets aside | Sections to read |
+|---|---|---|
+| Every command read-only | R1, R6, R7 under their own conditions; the mutation requirements (R2 to R5) do not apply | Core |
+| Some commands mutate state | R1 for every command; R2 to R5 for the commands that mutate; R6 and R7 under their own conditions | Core |
+| A *stream command* | O7 for that command in place of O5a, O5c, and O6, with O5b and O5d per record; the plain-output requirement for collections (H5) does not apply to it | Core |
+| An *accepting call* | R7, and I8 for a call that waits | Core |
+| `managed` claimed | R7 first, then M1 to M3; the wait command carries a deadline (I8b), and a listing of operations (M1f) is a collection (O6, H5) | Core, then Extension `managed` |
+| `continuation` claimed | C1 after O6, for a collection bounded under O6b; C2 after O7, for a *stream command* | Core, then Extension `continuation` |
+
 ## Stage D: Discovery and introspection
 
 A caller should be able to choose a command and construct a valid call without reading source code or probing commands that may change state.

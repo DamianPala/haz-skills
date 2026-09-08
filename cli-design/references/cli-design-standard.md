@@ -13,8 +13,8 @@ The standard is independent of the operating system, shell, implementation langu
 This section is non-normative. It records the decisions that shape the standard.
 
 - **A process contract.** The standard binds arguments, the standard streams, environment variables, exit codes, and one introspection command. It requires no daemon, socket, or protocol library, so any tool that can be executed can conform.
-- **A testable contract.** Each requirement has an observable pass or fail. A preference without a test belongs in guidance. For a requirement that a call must not produce an effect, the observable is the tool's declaration, not the effect's absence: a reviewer who may not mutate state verifies Stage R through D6, D7, and D8. A tool that declares nothing is not thereby conforming; it is unverifiable, and this standard distinguishes the two.
-- **An introspection command, not `--help --json`.** D7 and D8 form a versioned contract (D9), fetched without credentials, configuration, or network (D6), and carry `effects`, `confirm`, and an output schema. Help output is a rendering for people and stays free to change.
+- **A testable contract.** Each requirement has an observable pass or fail. A preference without a test belongs in guidance. For a requirement that a call must not produce an effect, the observable is the tool's declaration, not the effect's absence: a reviewer who may not mutate state verifies Stage R through the introspection command, its index, and command detail (D6, D7, D8). A tool that declares nothing is not thereby conforming; it is unverifiable, and this standard distinguishes the two.
+- **An introspection command, not `--help --json`.** The introspection index and command detail (D7, D8) form a versioned contract (D9), fetched without credentials, configuration, or network (D6), and carry `effects`, `confirm`, and an output schema. Help output is a rendering for people and stays free to change.
 - **Context from the stdin TTY, an explicit machine-readable format, and `NO_INPUT`.** Terms define the *interactive context* once. Each signal can only force the *non-interactive context*, so none can contradict a TTY; a tool-defined signal for the same context would let two signals disagree. A tool's default format does not force it, so a machine caller that runs the tool in a PTY needs an explicit machine-readable format or `NO_INPUT`.
 - **Conditional requirements and named extensions, no profiles.** Applicability is stated per requirement: Stage R when a command mutates, R7 when work outlives the command that started it, O6 when a collection has no documented finite maximum. An extension names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on: resumable pagination (`continuation`), observable accepted work with controls where cancellation or suspension exists (`managed`). A profile that bundled requirements across stages by choice would let one claim mean many things. An existing tool adopts by adding the introspection command and declaring, per command, what it keeps (Existing tools), so one claim keeps one meaning and the caller reads the exceptions from the index.
 - **`--json`, not `--output`.** `--json` is one flag a caller can pass without knowing the tool's format names. `--output` means a file path in some tools and a format in others, so a caller who sees it cannot tell which.
@@ -24,7 +24,7 @@ This section is non-normative. It records the decisions that shape the standard.
 
 Italics mark a term defined in this section.
 
-- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the call did not select a machine-readable stdout format explicitly, with `--json` or a `--format` value the tool documents as machine-readable; it runs in a non-interactive context otherwise. A non-empty `NO_INPUT` environment variable forces the non-interactive context under I5a. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; the stream a prompt is written to falls under I5a, and an interactive session or a pager requires a *terminal context* under I5b and I5d.
+- **Interactive context, non-interactive context.** A call runs in an interactive context when stdin is a TTY and the call did not select a machine-readable stdout format explicitly, with `--json` or a `--format` value the tool documents as machine-readable; it runs in a non-interactive context otherwise. A non-empty `NO_INPUT` environment variable forces the non-interactive context under I5a. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; a prompt written to the command's own streams goes to a stream that is a TTY under I5a, and an interactive session or a pager requires a *terminal context* under I5b and I5d.
 - **Terminal context.** A call runs in a terminal context when it runs in an *interactive context*, stdout is also a TTY, and the selected stdout format is human-readable.
 - **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
 - **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
@@ -124,7 +124,7 @@ The same call under `--json` carries it as `next`:
 
 **D6c** Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts. It MAY accept global flags without applying them.
 
-**D6d** Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return command detail; B2c defines which requirements bind that detail outside the conformance claim. A command path's segments are the parts of D7 `commands[].name` split on U+0020; each segment MUST be passed as a separate argument in that order. For a tool with one unnamed command (D7a `command`), any argument after the introspection command is an unknown path.
+**D6d** Routing: the introspection command alone MUST return the D7 index, and followed by a command path it MUST return command detail; outside the conformance claim that detail matches the parser under D6b and is not bound by D8 (B2c). A command path's segments are the parts of D7 `commands[].name` split on U+0020; each segment MUST be passed as a separate argument in that order. For a tool with one unnamed command (D7a `command`), any argument after the introspection command is an unknown path.
 
 **D6e** Errors: an unknown path MUST be a usage error and name the nearest valid paths, if any. When the unknown path is a command-path prefix of valid paths, matched at a segment boundary, those paths are the nearest. The error MUST NOT include unrelated paths merely to reproduce the full index; it MAY list the full index when every indexed path is a nearest match.
 
@@ -139,13 +139,13 @@ The same call under `--json` carries it as `next`:
 | `global_flags` | array | I1 flag descriptors accepted by every command. D8 `flags` MUST NOT repeat them. Excludes `--help` and `--version`, which D3b and D4d already require. |
 | `format_defaults` | object | O2 default format for each output context. |
 | `exit_codes` | object | F1 tool-wide exit code meanings. MUST contain the decimal-string keys of the F1a table and the substitutes B4a requires. |
-| `conformance` | object | Conformance claim; see D7c. |
+| `conformance` | object | Conformance claim: the standard version checked against, the claimed extensions, and an optional coverage scope (D7c). |
 | `commands` | array | Flat routing list of every command the tool itself dispatches, by full path, sorted by `name` in Unicode code point order; excludes the introspection command. Group prefixes that dispatch nothing themselves are not entries. Commands provided by external executables MAY be omitted only when the tool itself dispatches at least one command and the omitted executables are optional additions installed by the caller; the tool MUST document that they are omitted. |
-| `command` | object | Present exactly when the tool has one unnamed command: that command's detail. D8 binds it when the claim covers the command; B2c says what binds it otherwise. |
+| `command` | object | Present exactly when the tool has one unnamed command: that command's detail. D8 binds it when the claim covers the command; outside the claim it matches the parser under D6b instead (B2c). |
 
 **D7b** Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `name` MUST consist of non-empty segments separated by exactly one U+0020, or be `""` for the unnamed command, and MUST be unique within `commands`. `description` MUST distinguish neighboring commands, and `effects` is the R1a value. An entry MAY contain `conforming: false` under B2a; omitted, it means `true`.
 
-**D7c** In `conformance`, `name` and `standard` MUST equal `cli-design-standard` and the version of this document the tool was checked against, respectively. `extensions` MUST be present and contain each claimed extension exactly once, an empty array when none is claimed; a caller that does not recognize an extension name MUST NOT rely on that extension. `scope` MAY be present; B2b defines its shape and command coverage, and B2c defines what it limits.
+**D7c** In `conformance`, `name` and `standard` MUST equal `cli-design-standard` and the version of this document the tool was checked against, respectively. `extensions` MUST be present and contain each claimed extension exactly once, an empty array when none is claimed; a caller that does not recognize an extension name MUST NOT rely on that extension. `scope` MAY be present as command-path prefixes, with its shape and command coverage defined in B2b, and limits only requirements that apply per command (B2c).
 
 ### D8: Command detail MUST expose the command contracts.
 
@@ -160,8 +160,8 @@ Fields marked `always` in the table below MUST be present. A conditional field M
 | `effects` | string | always | The R1a value: `read_only`, `idempotent`, or `non_idempotent`. |
 | `confirm` | boolean | always | MUST be `true` when any valid call may require `--yes` under R3a and `false` otherwise. |
 | `interactive` | boolean | always | MUST be `true` when any valid call starts an interactive session under I5b and `false` otherwise. |
-| `stream` | boolean | `delegates_stdout` is not `true`, and success emits a record stream | MUST be `true`. `output` describes one record; see O7. |
-| `delegates_stdout` | boolean | every successful call writes to stdout only the unmodified stdout of a process the command runs | MUST be `true`. `output` and `stream` MUST NOT be present; see O2f. |
+| `stream` | boolean | `delegates_stdout` is not `true`, and success emits a record stream | MUST be `true`. `output` describes one record; the stream is bounded and framed under O7. |
+| `delegates_stdout` | boolean | every successful call writes to stdout only the unmodified stdout of a process the command runs | MUST be `true`. `output` and `stream` MUST NOT be present; stdout stays the contract of the process the command runs (O2f). |
 | `output` | object | `delegates_stdout` is not `true`, and success conveys data beyond the exit status or `changed` is required under R5a | O4 JSON Schema for the success document or one O7 record. When R5a requires `changed`, MUST declare it with type `boolean`, or with type `["boolean", "null"]` only when R5a permits `null`. |
 | `exit_codes` | object | adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
 | `format_defaults` | object | differs from tool default | O2 output defaults. |
@@ -326,7 +326,7 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 | `description` | string | MUST be present. One line stating what the input controls. |
 | `type` | string | MUST be present and equal `string`, `integer`, `number`, or `boolean`. |
 | `required` | boolean | MUST be present. `true` means the caller must provide the input. |
-| `default` | scalar or array | MUST be present when the parser supplies an actual default; see I1c. |
+| `default` | scalar or array | MUST be present when the parser supplies an actual default; run-time and sentinel values are not defaults (I1c). |
 | `enum` | array | MUST be present and list every choice when the parser declares a closed choice set. Every item MUST match `type`. |
 | `aliases` | array | MAY appear on flags and contain alternative names without leading hyphens. Alias rendering follows `name`. |
 | `variadic` | boolean | MAY be `true` only on the last argument. It consumes the remaining positional values as an ordered array; with `required: true`, it consumes at least one. |
@@ -374,7 +374,7 @@ $ mytool deploy service-a --env prod --manifest - < manifest.json
 
 ### I4: Secrets MUST NOT be passed as argument or flag values.
 
-**I4a** A command that needs a secret MUST provide a source usable in a *non-interactive context*, such as a credential store, file, stdin, or environment variable. Commands SHOULD use `--token-file PATH` for one secret and `--credentials-file PATH` for structured credentials; either flag SHOULD accept `-` for stdin. Secret-source precedence falls under I2b.
+**I4a** A command that needs a secret MUST provide a source usable in a *non-interactive context*, such as a credential store, file, stdin, or environment variable. Commands SHOULD use `--token-file PATH` for one secret and `--credentials-file PATH` for structured credentials; either flag SHOULD accept `-` for stdin. Secret-source precedence resolves deterministically and as documented under I2b.
 
 **I4b** A secret MUST NOT appear in help, introspection output, logs, errors, or normal output unless retrieval is the command's documented purpose.
 
@@ -386,9 +386,9 @@ With `--token-file token.txt` under `--verbose`, a diagnostic may name the sourc
 
 **I5b** Interactive sessions: a command MAY start an interactive session only in a *terminal context*; otherwise it MUST fail before side effects; the D8 `interactive` field carries the declaration. Starting an external editor is an interactive session.
 
-**I5c** Human action: a workflow MAY require an out-of-band human action. Its entry point MUST work in a *non-interactive context* and MUST be listed in D7 `commands`. Work that continues after that command exits falls under R7 and, where claimed, the `managed` extension. In a *non-interactive context*, a command that would wait for a human action outside the call, such as a browser or device approval, MUST fail before side effects and name the entry point or I4 source that resolves it, unless that wait is the command's documented purpose.
+**I5c** Human action: a workflow MAY require an out-of-band human action. Its entry point MUST work in a *non-interactive context* and MUST be listed in D7 `commands`. Work that continues after that command exits stays identifiable (R7) and, where claimed, falls under the `managed` extension. In a *non-interactive context*, a command that would wait for a human action outside the call, such as a browser or device approval, MUST fail before side effects and name the entry point or I4 source that resolves it, unless that wait is the command's documented purpose.
 
-**I5d** Paging: a pager MAY start only in a *terminal context*; see H3.
+**I5d** Paging: a pager MAY start only in a *terminal context* and follows the user's pager selection under H3.
 
 While stdin supplies the manifest, the command cannot prompt for confirmation, so it fails and names `--yes`:
 
@@ -426,7 +426,7 @@ $ cat 20-mib.bin | mytool upload - --json
 
 ### I8: External work MUST be bounded or explicitly unbounded.
 
-**I8a** Connection establishment and non-streaming network operations MUST use finite default timeouts. A command that waits for external state, when waiting is not its documented purpose, MUST use a finite default deadline. A wait for a human action falls under I5c.
+**I8a** Connection establishment and non-streaming network operations MUST use finite default timeouts. A command that waits for external state, when waiting is not its documented purpose, MUST use a finite default deadline. A wait for a human action falls under the human-action rule, I5c.
 
 **I8b** A command whose documented purpose is to wait, watch, follow, or run external work to completion MAY be unbounded by default, but MUST accept `--timeout`; its I1 descriptor MUST carry a finite default deadline as `default` or state in `description` that the wait is unbounded by default. `--timeout` MUST accept an integer immediately followed by `s`, `m`, or `h` and MAY accept other forms, such as a bare integer with a documented unit. A command that accepts `--verbose` and may wait longer than 10 seconds SHOULD, under `--verbose`, emit a liveness line on stderr under O3b at least every 30 seconds while waiting, and MUST document its liveness interval or that it emits no such lines.
 
@@ -447,7 +447,7 @@ The `--timeout` descriptor of a wait that is unbounded by default carries no `de
 
 ## Stage R: Repeatability and mutation safety
 
-This stage covers calls that mutate state or may be repeated. Safeguards follow the possible damage, not merely whether a command changes state. A tool whose every command declares `effects: read_only` has no mutation requirements under R2-R5. R6 applies when the tool retries requests internally, and R7 to an *accepting call*.
+This stage covers calls that mutate state or may be repeated. Safeguards follow the possible damage, not merely whether a command changes state. A tool whose every command declares `effects: read_only` has no mutation requirements under R2-R5. The rules for safe, bounded retries (R6) apply when the tool retries requests internally, and the rules for accepted work (R7) apply to an *accepting call*.
 
 ### R1: Effect metadata MUST be conservative.
 
@@ -574,9 +574,9 @@ The TTY state of stdin is one input to the prompt policy under I5a, stdout contr
 
 **O2c** Defaults: a *document or stream command* SHOULD default to human-readable output on a TTY. On non-TTY stdout, a *document or stream command* MUST default to JSON or NDJSON, except that a command whose primary result is a textual document rather than a set of fields or records MAY default to a declared native format such as text or Markdown.
 
-**O2d** Precedence: an explicit format flag MUST override the detected default. Two explicit format flags conflict under I6a.
+**O2d** Precedence: an explicit format flag MUST override the detected default. Two explicit format flags are a usage error under I6a.
 
-**O2e** Names: a command MUST NOT accept `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Under `--output-file`, the file receives exactly what stdout would have received, O5 applies to that file, and a success writes no bytes to stdout. Formats use `--json` or `--format`.
+**O2e** Names: a command MUST NOT accept `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Under `--output-file`, the file receives exactly what stdout would have received, the declared JSON contract in O5 applies to that file, and a success writes no bytes to stdout. Formats use `--json` or `--format`.
 
 A *silent command* under `--json`, and a *document command* under `--output-file`; both exit `0` and write no bytes to stdout, and the second leaves the result in `services.json`:
 
@@ -585,7 +585,12 @@ $ mytool config validate --json
 $ mytool services list --json --output-file services.json
 ```
 
-**O2f** Delegated stdout: on a *delegating command*, stdout is the contract of the process the command runs. On that command `--json` MUST NOT change stdout; it still forces the *non-interactive context* and selects the format F2 tests. O3a, O3b, O3d, O8, and H4 do not govern that stdout. Requirements on structured success output, including R4c, R5a, and R7a, do not apply to the command. F2 still applies to stderr. The command's exit status stays under F1, so a child exit status passed through unchanged violates F1 where it collides with a tool-wide meaning.
+**O2f** Delegated stdout: on a *delegating command*, stdout is the contract of the process the command runs. On that command `--json` MUST NOT change stdout; it still forces the *non-interactive context* and selects the format F2 tests. On such a command:
+
+- stdout is not governed by the stream roles, decoration, untrusted-value handling, pipe closure, or color rules (O3a, O3b, O3d, O8, H4);
+- requirements on structured success output do not apply (R4c, R5a, R7a);
+- stderr still carries failure diagnostics (F2);
+- the exit status keeps its tool-wide meaning (F1), so a child exit status passed through unchanged violates F1 where it collides with a tool-wide meaning.
 
 A D8 excerpt for a command that runs a caller-supplied program and passes its stdout through:
 
@@ -644,7 +649,7 @@ Example schema:
 
 **O5b** Values: values MUST keep their declared JSON types. Machine output MUST NOT silently truncate a value.
 
-**O5c** Bounded values: a command that may cap a single inline value MUST declare a required boolean `truncated` and an optional string `output_file` in its D8 output schema. When `truncated` is `true`, `output_file` MUST identify a file that holds the complete value. The file SHOULD NOT be accessible to other users. The inline value is a preview, and the file's retention MUST be documented. Collections and record streams MUST use O6 and O7 instead.
+**O5c** Bounded values: a command that may cap a single inline value MUST declare a required boolean `truncated` and an optional string `output_file` in its D8 output schema. When `truncated` is `true`, `output_file` MUST identify a file that holds the complete value. The file SHOULD NOT be accessible to other users. The inline value is a preview, and the file's retention MUST be documented. Collections and record streams MUST use their own bounds instead (O6, O7).
 
 **O5d** Time: timestamps MUST use RFC 3339 with a numeric offset or `Z`. Timestamps within one document or stream SHOULD share one precision so that lexical and chronological order agree. Numeric duration field names MUST state their unit.
 
@@ -671,7 +676,7 @@ A bounded single value may instead report:
 
 ### O6: Potentially unbounded document collections MUST be bounded.
 
-**O6a** An R4 target list, in a preview or in the mutation's own result, is not a collection under this requirement; a command that caps it falls under O5c.
+**O6a** An R4 target list, in a preview or in the mutation's own result, is not a collection under this requirement; a command that caps it reports truncation and, when it truncates, a file holding the complete value (O5c).
 
 **O6b** Window: a collection without a documented finite maximum MUST use a finite default limit and accept `--limit`. The tool MUST bound the number of items, not silently omit fields from individual items. An explicit `--limit` is the maximum number of items returned by that call.
 
@@ -699,7 +704,7 @@ $ mytool jobs list --limit 2 --json
 
 This requirement applies to a *stream command*.
 
-**O7a** Framing: `--json` MUST emit UTF-8 NDJSON with one complete JSON object per LF-terminated line and no blank lines. Each record MUST conform to D8 `output` and become readable before the command waits for another record or exits. Each record falls under O5b, O5d, and D9.
+**O7a** Framing: `--json` MUST emit UTF-8 NDJSON with one complete JSON object per LF-terminated line and no blank lines. Each record MUST conform to D8 `output` and become readable before the command waits for another record or exits. Each record keeps its declared value types without silent truncation (O5b), its timestamp form (O5d), and its field stability across compatible versions (D9).
 
 **O7b** Window: without `--follow`, the command MUST terminate. A stream without a documented finite maximum MUST use a finite default limit and accept `--limit`. `--follow`, an unbounded mode selected explicitly under I8c, removes that default limit when offered. An explicit `--limit` remains effective with or without `--follow` and ends the read after that many records. Reaching a limit ends that read, not the record source.
 
@@ -735,9 +740,9 @@ Failures need a stable machine signal and enough information for the caller to c
 | `1` | Generic failure. |
 | `2` | Usage error. |
 
-**F1b** A command whose documented result is one predicate (a yes-or-no answer about existing state, such as whether a unit is active or whether two files have no differences) MAY document one additional non-zero code for a false answer under F1d and F1e. For that command, exit `0` MUST mean true and the additional code MUST mean false. Both answers are successful outcomes: F2 and F3 do not apply, and F1c's postcondition is that the answer was determined.
+**F1b** A command whose documented result is one predicate (a yes-or-no answer about existing state, such as whether a unit is active or whether two files have no differences) MAY document one additional non-zero code for a false answer under F1d and F1e. For that command, exit `0` MUST mean true and the additional code MUST mean false. Both answers are successful outcomes: the structured error requirements, F2 and F3, do not apply, and F1c's postcondition is that the answer was determined.
 
-**F1c** Exit `0` MUST mean the command observed its documented postcondition through the interface it used. Independent re-verification is not required. For an *accepting call*, acceptance falls under R7; completion falls under R7d when the initiating command waits and, under `managed`, under M1.
+**F1c** Exit `0` MUST mean the command observed its documented postcondition through the interface it used. Independent re-verification is not required. For an *accepting call*, acceptance leaves an identifiable operation (R7); when the initiating command waits, it fails when the work does not succeed (R7d), and so does the wait command under `managed` (M1).
 
 **F1d** Additional codes MUST each have one stable meaning. Fine-grained failures MUST use F3 `kind` instead.
 
@@ -770,9 +775,9 @@ Run: mytool images list web
 |---|---|---|
 | `kind` | MUST | String with stable machine meaning; the values in the `kind` table below have shared meanings. |
 | `message` | MUST | String identifying the failed operation and cause. |
-| `retryable` | MAY | Boolean; see F3b. |
+| `retryable` | MAY | Boolean; `true` only when the same call may resolve the failure without duplicating an intended effect (F3b). |
 | `action` | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
-| `hint` | SHOULD | String recovery step; see F3b. |
+| `hint` | SHOULD | String recovery step, present when one concrete step is known (F3b). |
 | `context` | MAY | Object containing machine-readable values needed for recovery. R7a, R7d, and M1b require it for the failures they name; F3b and F4b recommend fields in it. |
 
 **F3b** `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe. `hint` is present when one concrete recovery step is known; omit it rather than guess. When `retryable` is `true`, `context` SHOULD carry `retry_after_ms`, a non-negative integer giving the shortest delay in milliseconds after which the same call may be sent again, and, when the tool knows an applicable finite retry limit, SHOULD carry `attempts_remaining`, a non-negative integer giving the number of additional times the caller may send the same call before that limit is exhausted.
@@ -812,7 +817,7 @@ A complete error object with every field:
 
 ### F4: Fallbacks and uncertain outcomes MUST be explicit.
 
-**F4a** If a failed command may have caused an intended effect and did not observe the outcome, it MUST use F3 `kind` `outcome_unknown` and MUST NOT report completion or absence. Which prior stdout remains valid falls under O5a and O7d.
+**F4a** If a failed command may have caused an intended effect and did not observe the outcome, it MUST use F3 `kind` `outcome_unknown` and MUST NOT report completion or absence. On failure, a document call writes no JSON value to stdout (O5a), and prior LF-terminated stream records remain valid (O7d).
 
 **F4b** If usable partial results or completed effects survive a failure, the structured error SHOULD identify them in `context`; completed effects go under `completed`, an array of the affected targets as the caller named them.
 
@@ -866,7 +871,7 @@ A person at the terminal should find familiar flag names, standard environment b
 
 ### H2: Tools with nested commands SHOULD provide shell completions.
 
-Static command, flag, and alias candidates fall under D1.
+Static command, flag, and alias candidates match actual behavior under D1.
 
 ### H3: External editors and pagers MUST respect user selection.
 
@@ -907,11 +912,18 @@ This section is the brownfield path. A tool with a released contract can adopt t
 
 ### B2: The claim MUST exclude incompatible retained commands.
 
-**B2a** A retained incompatible command MUST carry `conforming: false` in its D7 entry, and its retained behavior MUST be documented. Omitted, `conforming` means `true`; a marked entry itself remains subject to D7b. A retained `--json` that requires a value is such a command; it conforms once bare `--json` selects the D8 `output` document.
+**B2a** A retained incompatible command MUST carry `conforming: false` in its D7 entry, and its retained behavior MUST be documented. Omitted, `conforming` means `true`; a marked entry still carries the required entry fields under D7b. A retained `--json` that requires a value is such a command; it conforms once bare `--json` selects the D8 `output` document.
 
 **B2b** `scope` in D7 `conformance` MAY be present as a non-empty array of non-empty command-path prefixes. When present, the claim covers only a command whose `name` equals one of them or begins with one of them followed by U+0020, and a caller MUST NOT infer anything about commands outside it. A command outside `scope` need not carry `conforming: false`.
 
-**B2c** The claim covers every command not marked under B2a and, when `scope` is present, only the commands within it. `scope` limits only requirements that apply per command; the tool-wide requirements, D3a, D4c, D4d, D6, D7, D9, F1a, and O2a, bind regardless of it. `commands` still lists every command the tool dispatches, and each listed command still returns detail under D6d; for a command outside the claim, whether outside `scope` or marked `conforming: false`, that detail is bound by D6b and not by D8.
+**B2c** The claim covers every command not marked under B2a and, when `scope` is present, only the commands within it. `scope` limits only requirements that apply per command. These tool-wide requirements bind regardless of it:
+
+- root help (D3a);
+- flag-name consistency and the version flag (D4c, D4d);
+- the introspection command, its index, and their stability (D6, D7, D9);
+- the exit-code table and the declared default formats (F1a, O2a).
+
+`commands` still lists every command the tool dispatches, and each listed command still returns detail under D6d; for a command outside the claim, whether outside `scope` or marked `conforming: false`, that detail still matches the parser under D6b and is not bound by the D8 contract.
 
 ### B3: Released names, defaults, and flag positions MAY be kept.
 
@@ -937,7 +949,7 @@ This section is the brownfield path. A tool with a released contract can adopt t
 
 **B4b** A released `kind` whose meaning conflicts with the F3c table MAY be retained; the tool MUST document it as not conforming.
 
-**B4c** Reserved names: a command that already returns, in its success output, a reserved field name with an incompatible type or meaning MAY retain it when it returns this standard's meaning under another name. It MUST then declare the collision in D8 `reserved_overrides`, an object mapping each such reserved field name to the name that carries this standard's meaning. Where a requirement names a reserved field name in a D8 schema, in success output, in F3 `context`, or in a collection item, a command with a `reserved_overrides` entry for that name satisfies the requirement under the mapped name, MUST use the mapped name at every such location, and the mapped value keeps the type and meaning the requirement states. A command that provides no name for that meaning is incompatible and falls under B2a. A caller SHOULD consult `reserved_overrides` before reading a reserved field name from that command's output.
+**B4c** Reserved names: a command that already returns, in its success output, a reserved field name with an incompatible type or meaning MAY retain it when it returns this standard's meaning under another name. It MUST then declare the collision in D8 `reserved_overrides`, an object mapping each such reserved field name to the name that carries this standard's meaning. Where a requirement names a reserved field name in a D8 schema, in success output, in F3 `context`, or in a collection item, a command with a `reserved_overrides` entry for that name satisfies the requirement under the mapped name, MUST use the mapped name at every such location, and the mapped value keeps the type and meaning the requirement states. A command that provides no name for that meaning is incompatible and falls under the exclusion in B2a. A caller SHOULD consult `reserved_overrides` before reading a reserved field name from that command's output.
 
 A command whose released output uses `status: "archived"` for a lifecycle state can retain it and return this standard's operation outcome as `state: "succeeded"`. Its D8 detail declares the mapping; this excerpt shows the relevant fields:
 
@@ -1036,7 +1048,7 @@ A caller that holds an identifier under R7 can learn the current state of the wo
 
 ### M1: Managed work MUST expose status and wait.
 
-**M1a** Commands: the tool MUST provide commands, usable in a *non-interactive context*, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under R7a; their names fall under D4b. Both commands MUST declare `effects: read_only`. The status command MUST report the current state without waiting for a terminal state.
+**M1a** Commands: the tool MUST provide commands, usable in a *non-interactive context*, for inspecting current status and waiting for a terminal state. Both MUST accept the identifier returned under R7a; their names follow the naming preferences in D4b. Both commands MUST declare `effects: read_only`. The status command MUST report the current state without waiting for a terminal state.
 
 **M1b** Results: structured results from both commands MUST contain `status` and the identifier. The F3 object of a wait that fails after argument parsing MUST carry the identifier and `status` in `context`; `status` is the last observed state, or `null` when no state was observed, including under M1d `not_found`. The structured success results of both commands SHOULD carry, under O5d and with tool-defined field names, timestamps for when the operation started and when it entered the status the result reports.
 
@@ -1046,13 +1058,13 @@ A caller that holds an identifier under R7 can learn the current state of the wo
 
 **M1e** Wait: the wait command MUST exit `0` only when it observes the terminal state `succeeded`; any other terminal state MUST fail with `kind` `operation_failed`. Failure to observe the operation MUST fail with the applicable `kind`. The wait command's I8b `--timeout` deadline fails with `kind` `timeout`. It MUST return immediately when the operation is already terminal. Timing out or terminating it MUST NOT cancel or otherwise change the operation, and MUST NOT be reported as a terminal operation outcome. A wait failure that names an existing operation SHOULD give, as its F3b `hint`, a concrete status or log invocation when that invocation can advance recovery; other failures follow F3b without a wait-specific `hint` requirement.
 
-**M1f** Listing: the tool SHOULD provide a command, usable in a *non-interactive context*, that lists managed operations with the identifier and `status`; its result falls under O6.
+**M1f** Listing: the tool SHOULD provide a command, usable in a *non-interactive context*, that lists managed operations with the identifier and `status`; its result is a bounded collection under O6.
 
 ### M2: Cancellation MUST be honest.
 
-**M2a** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a *non-interactive context*, whose name falls under D4b. It MUST accept the identifier returned under R7a, declare `effects: idempotent`, and fall under Stage R.
+**M2a** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a *non-interactive context*, whose name follows the naming preferences in D4b. It MUST accept the identifier returned under R7a, declare `effects: idempotent`, and fall under Stage R.
 
-**M2b** Structured success MUST contain `status` and the identifier; `changed` falls under R5a. Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
+**M2b** Structured success MUST contain `status` and the identifier; `changed` reports whether this call caused a new intended state transition, not whether the managed operation completed (R5a). Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
 
 A cancellation that is accepted, then observed by the wait command, which fails on stderr because the terminal state is not `succeeded`:
 
@@ -1069,6 +1081,6 @@ $ mytool jobs wait job_123 --timeout 5m --json
 
 ### M3: Resumable suspension MUST remain distinct from cancellation.
 
-**M3a** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a *non-interactive context*, whose names fall under D4b. Both MUST accept the identifier returned under R7a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
+**M3a** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a *non-interactive context*, whose names follow the naming preferences in D4b. Both MUST accept the identifier returned under R7a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
 
-**M3b** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M2 remains terminal and MUST NOT mean suspension. On an operation that is already terminal, they fall under M2b.
+**M3b** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M2 remains terminal and MUST NOT mean suspension. On an operation that is already terminal, they report the observed terminal state under M2b.

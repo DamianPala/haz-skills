@@ -4,7 +4,7 @@
 
 ## Scope
 
-This document defines the contract for command-line tools, new or adapted, for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations. The requirements are written for greenfield: a tool or path with no released contract. Brownfield adoption, keeping released behavior that callers depend on, is the subject of Existing tools.
+This document defines the contract for command-line tools, new or adapted, for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations. The requirements are written for greenfield: a tool or path with no released contract. Brownfield adoption, keeping released behavior that callers depend on, is the subject of [Existing tools](#existing-tools).
 
 The standard is independent of the operating system, shell, implementation language, framework, and backend. Arguments, standard streams, environment variables, exit codes, and TTY refer to the equivalent process interfaces on each platform. Examples are non-normative; command examples use POSIX-like notation for readability.
 
@@ -15,42 +15,41 @@ This section is non-normative. It records the decisions that shape the standard.
 - **A process contract.** The standard binds arguments, the standard streams, environment variables, exit codes, and one introspection command. It requires no daemon, socket, or protocol library, so any tool that can be executed can conform.
 - **A testable contract.** Each requirement has an observable pass or fail. A preference without a test belongs in guidance. The introspection index and command detail let a reviewer inspect the tool's declared contracts without invoking domain operations (D7, D8). Checking those declarations alone does not establish that the tool's behavior satisfies them; the agreement rule (D1) still applies.
 - **An introspection command, not `--help --json`.** The introspection index and command detail (D7, D8) form a versioned contract (D9), fetched without credentials, configuration, or network (D6), and carry `effects`, `confirm`, and an output schema. Help output is a rendering for people and stays free to change.
-- **Context from the stdin TTY, an explicit machine-readable format, and `NO_INPUT`.** Terms define the *interactive context* once. Each signal can only force the *non-interactive context*, so none can contradict a TTY; a tool-defined signal for the same context would let two signals disagree. A tool's default format does not force it, so a machine caller that runs the tool in a PTY needs an explicit machine-readable format or `NO_INPUT`.
-- **Conditional requirements and named extensions, no profiles.** Applicability is stated per requirement: Stage R when a command mutates, R7 when work outlives the command that started it, O6 when a collection has no documented finite maximum. An extension names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on: resumable pagination (`continuation`), observable accepted work with controls where cancellation or suspension exists (`managed`). A profile that bundled requirements across stages by choice would let one claim mean many things. An existing tool adopts by adding the introspection command and declaring, per command, what it keeps (Existing tools), so one claim keeps one meaning and the caller reads the exceptions from the index.
-- **`--json`, not `--output`.** `--json` is one flag a caller can pass without knowing the tool's format names. `--output` means a file path in some tools and a format in others, so a caller who sees it cannot tell which.
+- **Context from the stdin TTY, an explicit machine-readable format, and `NO_INPUT`.** [Terms](#terms) define the *interactive context* once. This standard defines `NO_INPUT` as an environment variable whose non-empty value disables prompting regardless of the stdin TTY. Each signal can only force the *non-interactive context*, so none can contradict a TTY; a tool-defined signal for the same context would let two signals disagree. A tool's default format does not force it, so a machine caller that runs the tool in a PTY needs an explicit machine-readable format or `NO_INPUT`.
+- **Explicit applicability.** Each requirement states when it applies. Optional extensions name additional guarantees, such as cursor-based continuation or observable background work.
 - **An open table of error kinds.** Names in the F3 error table keep their meanings everywhere; any other `kind` is tool-defined and unprefixed. A caller acts on the names it knows either way, and a prefix would only cost the tool.
 
 ## Terms
 
 Italics mark a term defined in this section.
 
-- **Interactive context, non-interactive context.** A call runs in a non-interactive context if stdin is not a TTY, if the call explicitly selects a machine-readable stdout format with `--json` or a `--format` value the tool documents as machine-readable, or if `NO_INPUT` is non-empty (I5a). Otherwise it runs in an interactive context. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; a prompt written to the command's own streams goes to a stream that is a TTY under I5a, and an interactive session or a pager requires a *terminal context* under I5b and I5d.
-- **Terminal context.** A call runs in a terminal context when it runs in an *interactive context*, stdout is also a TTY, and the selected stdout format is human-readable.
-- **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
+- **Caller.** The person or program that runs the tool and consumes its output.
 - **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
-- **Structured output.** Stdout written in a machine-readable format: the O5a document or the O7 record stream. A structured success is a success that writes it.
-- **Fail with a `kind`.** To fail with a `kind` is to exit non-zero and, wherever structured errors are demanded (F2), emit a structured error object (F3) with that `kind`; other requirements cite this definition.
-- **Document command, stream command, silent command, delegating command.** Four shapes of what a successful call writes to stdout, read from the D8 fields:
+- **Interactive context, non-interactive context.** A call runs in a non-interactive context if stdin is not a TTY, if the call explicitly selects a machine-readable stdout format with `--json` or a `--format` value the tool documents as machine-readable, or if `NO_INPUT` is non-empty (I5a). Otherwise it runs in an interactive context. A machine-readable default format does not by itself make the context non-interactive. These terms govern prompts and consent; the rules for prompts, interactive sessions, and pagers are in I5.
+- **Terminal context.** A call runs in a terminal context when it runs in an *interactive context*, stdout is also a TTY, and the selected stdout format is human-readable.
+- **Introspection command.** The arguments, excluding the program name, that return the introspection index describing the tool's commands and shared interface settings (D7). It is `schema` unless that name belongs to a released command and another form is required by the retained-name rules (B3).
+- **Document command, stream command, silent command, delegating command.** Four shapes of successful stdout: a document, a record stream, no output, or output from a delegated process. The command detail's fields (D8) identify them:
   - a document command has `output` and does not declare `stream: true`;
   - a stream command declares `stream: true`;
   - a silent command has neither `output` nor `delegates_stdout: true`;
   - a delegating command declares `delegates_stdout: true`.
-- **Introspection command.** The arguments, excluding the program name, that return the D7 index. It is `schema` unless another form is required under B3.
-- **Caller.** The person or program that runs the tool and consumes its output.
-- **Gated call.** A call that does not carry `--yes` and would reach an effect for which R2b or the tool itself requires confirmation.
+- **Structured output.** Stdout written in a machine-readable format: a single document (O5a) or a record stream (O7). A structured success is a success that writes it.
+- **Fail with a `kind`.** To fail with a `kind` is to exit non-zero and, wherever structured errors are demanded (F2), emit a structured error object (F3) with that `kind`; other requirements cite this definition.
+- **Reserved field name.** A field name this standard defines with a meaning in success output: `changed`, `cursor`, `has_more`, `items`, `next`, `next_cursor`, `output_file`, `requires_confirmation`, `status`, `targets`, and `truncated`.
+- **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
+- **Gated call.** A call that does not carry `--yes` and would reach an effect requiring confirmation under the mutation safeguards (R2b) or the tool's own policy.
 - **Managed operation.** Work that continues after the command that started it exits.
 - **Accepting call.** A call that exits after the work it started was accepted and before that work finishes.
-- **Reserved field name.** A field name this standard defines with a meaning in success output: `changed`, `cursor`, `has_more`, `items`, `next`, `next_cursor`, `output_file`, `requires_confirmation`, `status`, `targets`, and `truncated`.
-- **Core requirement.** A normative statement in a section before Extensions.
-- **Extension.** A named section under Extensions. An extension is an optional guarantee that a tool enables by declaring its name in D7; its requirements bind only a tool that declares it.
+- **Core requirement.** A normative statement in a section before [Extensions](#extensions).
+- **Extension.** A named section under [Extensions](#extensions). An extension is an optional guarantee that a tool enables by declaring its name in the introspection index's conformance claim (D7); its requirements bind only a tool that declares it.
 
 ## Conformance
 
 A conforming tool MUST satisfy every applicable core requirement in this standard. A conditional requirement applies only when its stated condition is true.
 
-A full conformance claim is the D7 `conformance` field. It MUST identify the version of this document the tool was checked against and every extension the tool claims. A claim of any `0.1.x` version is valid under every later `0.1.x`, because a `0.1.x` release adds no core requirement, strengthens none, and changes no meaning of a name, field, flag, or `kind` a caller may rely on; a change that would do any of these is `0.2.0`. This version defines two extensions under Extensions, `continuation` and `managed`. A tool MAY claim an extension only if every applicable requirement in its section is satisfied on every command the claim covers.
+A full conformance claim is the D7 `conformance` field. It MUST identify the version of this document the tool was checked against and every extension the tool claims. A claim of any `0.1.x` version is valid under every later `0.1.x`, because a `0.1.x` release adds no core requirement, strengthens none, and changes no meaning of a name, field, flag, or `kind` a caller may rely on; a change that would do any of these is `0.2.0`. This version defines two extensions under [Extensions](#extensions), [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) and [`managed`](#extension-managed-accepted-work-must-be-observable). A tool MAY claim an extension only if every applicable requirement in its section is satisfied on every command the claim covers.
 
-A tool with a released contract adopts this standard under Existing tools, which defines what such a tool may keep and how the claim excludes incompatible retained commands. Every requirement outside that section remains applicable except where that section states what released behavior may be kept.
+A tool with a released contract adopts this standard under [Existing tools](#existing-tools), which defines what such a tool may keep and how the claim excludes incompatible retained commands. Every requirement outside that section remains applicable except where that section states what released behavior may be kept.
 
 Tests and conformance tools can verify these requirements, but this document remains authoritative if they disagree.
 
@@ -64,16 +63,16 @@ The non-normative [maintenance guide](cli-design-standard-maintenance.md) define
 
 ## How to read this standard
 
-This section is not part of conformance. Whether a requirement applies is decided by that requirement's own condition, never by this section; the tables below say where to start and which sections to read. For a new tool, start with the sections through Stage H. Existing tools and the two extensions follow, and each says when it applies.
+This section is not part of conformance. Whether a requirement applies is decided by that requirement's own condition, never by this section; the tables below say where to start and which sections to read. For a new tool, start with the sections through [Stage H](#stage-h-human-interface). [Existing tools](#existing-tools) and the two extensions follow, and each says when it applies.
 
 By goal:
 
 | Goal | Where to start | Sections to read |
 |---|---|---|
-| Implement a new tool | Scope and Terms, then the stages in order; the introspection contracts (D7, D8) are what the later stages fill in | Core |
-| Audit a conformance claim | Conformance, then the D7 `conformance` field, then D8 for each covered command | Core; Existing tools; each claimed extension |
-| Look up a flag name, a D8 field, or a `kind` | H1b, D8, F3c | Stage H, Stage D, Stage F |
-| Adopt a tool with a released contract | Existing tools, B1 to B4, before anything else, then as for a new tool | Existing tools, then core |
+| Implement a new tool | [Scope](#scope) and [Terms](#terms), then the stages in order; the introspection contracts (D7, D8) are what the later stages fill in | Core |
+| Audit a conformance claim | [Conformance](#conformance), then the D7 `conformance` field, then D8 for each covered command | Core; [Existing tools](#existing-tools); each claimed extension |
+| Look up a flag name, a D8 field, or a `kind` | H1b, D8, F3c | [Stage H](#stage-h-human-interface), [Stage D](#stage-d-discovery-and-introspection), [Stage F](#stage-f-failure) |
+| Adopt a tool with a released contract | [Existing tools](#existing-tools), B1 to B4, before anything else, then as for a new tool | [Existing tools](#existing-tools), then core |
 
 By tool shape:
 
@@ -83,8 +82,8 @@ By tool shape:
 | Some commands mutate state | R1 for every command; R2 to R5 for the commands that mutate; R6 and R7 under their own conditions | Core |
 | A *stream command* | O7 for that command in place of O5a, O5c, and O6, with O5b and O5d per record; the plain-output requirement for collections (H5) does not apply to it | Core |
 | An *accepting call* | R7, and I8 for a call that waits | Core |
-| `managed` claimed | R7 first, then M1 to M3; the wait command carries a deadline (I8b), and a listing of operations (M1f) is a collection (O6, H5) | Core, then Extension `managed` |
-| `continuation` claimed | C1 after O6, for a collection bounded under O6b; C2 after O7, for a *stream command* | Core, then Extension `continuation` |
+| [`managed`](#extension-managed-accepted-work-must-be-observable) claimed | R7 first, then M1 to M3; the wait command carries a deadline (I8b), and a listing of operations (M1f) is a collection (O6, H5) | Core, then Extension [`managed`](#extension-managed-accepted-work-must-be-observable) |
+| [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) claimed | C1 after O6, for a collection bounded under O6b; C2 after O7, for a *stream command* | Core, then Extension [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) |
 
 ## Stage D: Discovery and introspection
 
@@ -627,6 +626,8 @@ Which format stdout uses is settled by four clauses together: the declared defau
 **O2d** Precedence: an explicit format flag MUST override the detected default. Two explicit format flags are a usage error under I6a.
 
 **O2e** Names: a command MUST NOT accept `--output`. If it accepts a destination path, the flag MUST be named `--output-file`. Under `--output-file`, the file receives exactly what stdout would have received, the declared JSON contract in O5 applies to that file, and a success writes no bytes to stdout. Formats use `--json` or `--format`.
+
+`--json` is one flag a caller can pass without knowing the tool's format names. `--output` means a file path in some tools and a format in others, so a caller who sees it cannot tell which.
 
 A *silent command* under `--json`, and a *document command* under `--output-file`; both exit `0` and write no bytes to stdout, and the second leaves the result in `services.json`:
 

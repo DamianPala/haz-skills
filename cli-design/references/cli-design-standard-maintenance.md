@@ -32,13 +32,13 @@ Shapes the conformance claim cannot express in this version, each seen in one re
 
 The standard stays short. Text stays when it helps a reader apply a requirement: it states one, defines a term one uses, resolves an ambiguity in one, shows one working, says why it exists, or says where to read next. Anything else belongs elsewhere or nowhere. Design principles is non-normative and stays short.
 
-Accommodations for released contracts live under Existing tools. A requirement elsewhere states the baseline and carries no brownfield qualifier; what a released path may keep is a row or clause in that section, not a condition in the requirement. D7 and D8 may describe the fields that declare retained behavior, and a requirement may point to the accommodation that applies; the permission to retain and its conditions are defined only in Existing tools.
+Accommodations for released contracts live under Existing tools. A requirement elsewhere states the baseline and carries no brownfield qualifier; what a released path may keep is a row or clause in that section, not a condition in the requirement. D6 and D7 may describe the fields that declare retained behavior, and a requirement may point to the accommodation that applies; the permission to retain and its conditions are defined only in Existing tools.
 
 A cross-reference names in words what the referenced rule requires, as far as the referring sentence needs it, and the identifier follows the words, so the sentence still says what applies with the identifier removed. The words carry no normative keyword and add no condition; the identifier stays the address of the rule. When a table defines whether a field is present, another rule refers to that condition instead of imposing it again and states only the behavior it adds.
 
 Examples are independent fragments unless the text connects them, and an excerpt says that it is one.
 
-A term in Terms names exactly the condition it replaced. When a phrase becomes a term or a definition changes, the old and new conditions are equivalent in both directions, and every use of the term keeps its meaning with the definition expanded in place. A change to a D8 field condition is rechecked against every term that reads that field.
+A term in Terms names exactly the condition it replaced. When a phrase becomes a term or a definition changes, the old and new conditions are equivalent in both directions, and every use of the term keeps its meaning with the definition expanded in place. A change to a D7 field condition is rechecked against every term that reads that field.
 
 Requirement and clause identifiers are scoped to a version of this document: after inserting, splitting, or removing a clause, later clauses are relettered in reading order and every internal reference still names its intended rule; an external citation names the version.
 

@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.1.0-draft.6
+**Version:** 0.1.0-draft.7
 
 ## Scope
 
@@ -214,7 +214,7 @@ $ mytool schema
   ],
   "format_defaults": {"tty": "text", "non_tty": "json"},
   "exit_codes": {"0": "success", "1": "failure", "2": "usage error"},
-  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.6", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.7", "extensions": []},
   "commands": [
     {"name": "services get", "description": "Get a deployed service", "effects": "read_only"},
     {"name": "services list", "description": "List deployed services", "effects": "read_only"}
@@ -283,7 +283,7 @@ $ hashfile schema
   ],
   "format_defaults": {"tty": "text", "non_tty": "json"},
   "exit_codes": {"0": "success", "1": "failure", "2": "usage error"},
-  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.6", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.7", "extensions": []},
   "commands": [{"name": "", "description": "Hash a file", "effects": "read_only"}],
   "command": {
     "name": "",

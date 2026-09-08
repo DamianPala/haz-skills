@@ -29,6 +29,7 @@ Italics mark a term defined in this section.
 - **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
 - **Machine-readable, human-readable.** `json` and `ndjson` are machine-readable formats, as is any other format the tool documents as machine-readable. Every other format, including `text`, `plain`, Markdown, and a native document format, is human-readable.
 - **Structured output.** Stdout written in a machine-readable format: the O5a document or the O7 record stream. A structured success is a success that writes it.
+- **Fail with a `kind`.** To fail with a `kind` is to exit non-zero and, wherever structured errors are demanded (F2), emit a structured error object (F3) with that `kind`; other requirements cite this definition.
 - **Document command, stream command, silent command, delegating command.** Four shapes of what a successful call writes to stdout, read from the D8 fields:
   - a document command has `output` and does not declare `stream: true`;
   - a stream command declares `stream: true`;
@@ -105,12 +106,12 @@ Discovery is layered: `--help` under D3, the introspection command under D6, and
 A queued deployment renders the breadcrumb at a terminal:
 
 ```console
-$ mytool deploy service-a --env prod --yes
+$ mytool deploy service-a --env prod --yes --background
 Deployment queued: dep_123
 Next: mytool deployments wait dep_123
 ```
 
-The same call under `--json` carries it as `next`:
+The same call, `mytool deploy service-a --env prod --yes --background --json`, carries it as `next`:
 
 ```json
 {
@@ -718,6 +719,8 @@ A bounded single value may instead report:
 
 ### O6: Potentially unbounded document collections MUST be bounded.
 
+This requirement applies to document collections; it first sets aside mutation target lists (O6a).
+
 **O6a** An R4 target list, in a preview or in the mutation's own result, is not a collection under this requirement; a command that caps it reports truncation and, when it truncates, a file holding the complete value (O5c).
 
 **O6b** Window: a collection without a documented finite maximum MUST use a finite default limit and accept `--limit`. The tool MUST bound the number of items, not silently omit fields from individual items. An explicit `--limit` is the maximum number of items returned by that call.
@@ -792,9 +795,9 @@ Failures need a stable machine signal and enough information for the caller to c
 
 ### F2: Structured errors MUST have one location.
 
-**F2a** To fail with a `kind` is to exit non-zero and, wherever this requirement demands the object, emit an F3 object with that `kind`; other requirements cite this definition. When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object.
+**F2a** When the tool exits with an error, stderr MUST contain the F3 `message` and, when the error has one, its `hint`, as human-readable diagnostics or inside the F3 JSON object. The meaning of fail with a `kind` is defined in Terms.
 
-**F2b** The tool MUST emit that object when the selected stdout format is machine-readable or stderr is not a TTY, including under `--quiet`; otherwise the object MAY be omitted. When `--json` appears among the arguments before `--`, a failure raised before the format was resolved MUST emit the object.
+**F2b** The tool MUST emit the error object when the selected stdout format is machine-readable or stderr is not a TTY, including under `--quiet`; otherwise the object MAY be omitted. When `--json` appears among the arguments before `--`, a failure raised before the format was resolved MUST emit the object.
 
 **F2c** Whenever the object is emitted, it MUST be the last non-empty stderr line, and a requirement that names an F3 `kind` applies to it. The object MUST NOT be written to stdout.
 
@@ -834,14 +837,14 @@ Run: mytool images list web
 |---|---|---|
 | `invalid_input` | The call is a usage error or exceeds an I7 bound. | I6 |
 | `not_found` | A target identified by an argument or flag value does not exist in the state the tool manages or targets. | M1 |
-| `conflict` | Authoritative state conflicts with the requested change, such as a concurrent modification or a strict create whose target exists. | R5 |
+| `conflict` | Authoritative state conflicts with the requested change, such as a concurrent modification or a strict create whose target exists. | R3, R5 |
 | `permission_denied` | The caller is identified and the action is forbidden. | |
 | `unauthenticated` | The caller could not be identified: credentials are missing, invalid, or expired. | |
-| `timeout` | The command's own I8 deadline passed; any intended effect either is known not to have happened or is identified in `context` under R7a. | |
+| `timeout` | The command's own I8 deadline passed; any intended effect either is known not to have happened or is identified in `context` under R7a. | R7, M1 |
 | `unavailable` | A dependency rejected or failed the request transiently, including rate limiting. | |
-| `outcome_unknown` | The intended effect may have happened and was not observed. | F4 |
+| `outcome_unknown` | The intended effect may have happened and was not observed. | R7, F4 |
 | `interrupted` | The user interrupted the command and F4 does not apply. | F5 |
-| `cursor_unavailable` | The cursor is invalid, expired, or incompatible, or required history is missing. | O6, O7 |
+| `cursor_unavailable` | The cursor is invalid, expired, or incompatible, or required history is missing. | C1, C2 |
 | `confirmation_required` | R3 stopped a *gated call* before its effect. | R3 |
 | `operation_failed` | A managed operation reached a terminal state other than `succeeded`; `context` carries the identifier and `status`. | R7, M1 |
 | `precondition_failed` | A documented precondition that `--force` overrides is not met. | |
@@ -917,6 +920,8 @@ A person at the terminal should find familiar flag names, standard environment b
 
 ### H2: Tools with nested commands SHOULD provide shell completions.
 
+Tools with nested commands SHOULD provide shell completions.
+
 Static command, flag, and alias candidates match actual behavior under D1.
 
 ### H3: External editors and pagers MUST respect user selection.
@@ -932,6 +937,8 @@ A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documente
 At a terminal, `NO_COLOR=1 mytool services list` and `TERM=dumb mytool services list` print no color. In a pipe, a tool that accepts `--format` keeps color with `mytool services list --format text --color always | less -R` because the output is human-readable, while `mytool services list --color always | jq .` emits none because stdout is then machine-readable under O2 and O3.
 
 ### H5: A command whose result is a complete collection under O6 SHOULD offer `--plain`.
+
+A command whose result is a complete collection (O6) SHOULD offer `--plain`.
 
 **H5a** A command whose result is bounded under O6b MAY reject `--plain` for a page that was not selected explicitly with `--limit` or, under C1, `--cursor`, because plain output carries no `has_more`.
 

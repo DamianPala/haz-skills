@@ -7,10 +7,16 @@ Checks, per file:
 - requirement IDs (``### D1:`` headings) are unique and in stage order;
 - clause markers (``**D1a**`` at the start of a paragraph) belong to the
   enclosing requirement and run a, b, c without gaps or duplicates;
-- every reference to a requirement or clause ID resolves to a defined one;
+- every reference to a requirement or clause ID resolves to one defined in
+  any of the checked files, so the maintenance guide's references are
+  resolved against the standard when both are given;
 - every ``"standard"`` value in a JSON example equals the header version;
 - no em dash (U+2014), no trailing whitespace;
 - no indented table row (tables live at column zero).
+
+On success it also prints the normative keyword counts of each file
+(MUST, SHOULD, MAY; ``MUST NOT`` and ``SHOULD NOT`` count under their base
+keyword) so an edit can be compared with the text before it.
 
 Usage: ``uv run --no-project python cli-design/scripts/check-standard.py [FILE ...]``
 from the repository root. Without arguments it checks the standard itself.
@@ -22,6 +28,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_FILE = Path("cli-design/references/cli-design-standard.md")
@@ -30,13 +37,23 @@ ID_DEFINITION = re.compile(r"^### ([A-Z][0-9]+):")
 ID_TOKEN = re.compile(r"(?<![A-Za-z0-9+])([A-Z][0-9]+)(?![A-Za-z0-9])")
 CLAUSE_MARKER = re.compile(r"^\*\*([A-Z][0-9]+)([a-z])\*\* ")
 CLAUSE_TOKEN = re.compile(
-    rf"(?<![A-Za-z0-9+`])([{STAGES}][1-9][0-9]*[a-z])(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z0-9+])([{STAGES}][1-9][0-9]*[a-z])(?![A-Za-z0-9])"
 )
 VERSION_LINE = re.compile(r"^\*\*Version:\*\* (\S+)$")
 STANDARD_VALUE = re.compile(r'"standard": "([^"]*)"')
 FENCE = re.compile(r"^```(\w*)\s*$")
+KEYWORDS = ("MUST", "SHOULD", "MAY")
 
 Segment = tuple[int, str, str]
+
+
+@dataclass
+class Document:
+    path: Path
+    lines: list[str]
+    segments: list[Segment]
+    defined: dict[str, int] = field(default_factory=dict)
+    markers: set[str] = field(default_factory=set)
 
 
 def split_fences(lines: list[str]) -> list[Segment]:
@@ -67,16 +84,21 @@ def prose_lines(segments: list[Segment]):
             yield start + offset, line
 
 
-def check_json_blocks(path: Path, segments: list[Segment]) -> list[str]:
+def load(path: Path) -> Document:
+    lines = path.read_text(encoding="utf-8").split("\n")
+    return Document(path, lines, split_fences(lines))
+
+
+def check_json_blocks(doc: Document) -> list[str]:
     problems = []
-    for start, kind, text in segments:
+    for start, kind, text in doc.segments:
         if kind != "json":
             continue
         try:
             json.loads(text)
         except json.JSONDecodeError as error:
             line = start + error.lineno - 1
-            problems.append(f"{path}:{line}: invalid JSON block: {error.msg}")
+            problems.append(f"{doc.path}:{line}: invalid JSON block: {error.msg}")
     return problems
 
 
@@ -84,40 +106,34 @@ def stage_key(identifier: str) -> tuple[int, int]:
     return STAGES.find(identifier[0]), int(identifier[1:])
 
 
-def check_ids(path: Path, segments: list[Segment]) -> tuple[list[str], list[str]]:
-    """Check heading IDs; return (problems, defined IDs in reading order)."""
+def collect_ids(doc: Document) -> list[str]:
+    """Record heading IDs on the document; check uniqueness and stage order."""
     problems = []
-    defined: dict[str, int] = {}
-    for number, line in prose_lines(segments):
+    for number, line in prose_lines(doc.segments):
         for identifier in ID_DEFINITION.findall(line):
-            if identifier in defined:
+            if identifier in doc.defined:
                 problems.append(
-                    f"{path}:{number}: duplicate requirement ID {identifier}"
-                    f" (first defined at line {defined[identifier]})"
+                    f"{doc.path}:{number}: duplicate requirement ID {identifier}"
+                    f" (first defined at line {doc.defined[identifier]})"
                 )
             else:
-                defined[identifier] = number
-    order = list(defined)
+                doc.defined[identifier] = number
+    order = list(doc.defined)
     for previous, current in zip(order, order[1:]):
         if stage_key(current) <= stage_key(previous):
             problems.append(
-                f"{path}:{defined[current]}: requirement {current} out of order after {previous}"
+                f"{doc.path}:{doc.defined[current]}: requirement {current}"
+                f" out of order after {previous}"
             )
-    letters = {identifier[0] for identifier in defined}
-    for number, line in prose_lines(segments):
-        for token in ID_TOKEN.findall(line):
-            if token[0] in letters and token not in defined:
-                problems.append(f"{path}:{number}: unresolved requirement ID {token}")
-    return problems, order
+    return problems
 
 
-def check_clauses(path: Path, segments: list[Segment], defined: list[str]) -> list[str]:
-    """Check clause markers against their requirement and clause citations against markers."""
+def collect_clauses(doc: Document) -> list[str]:
+    """Record clause markers on the document; check they sit under their requirement."""
     problems = []
-    markers: set[str] = set()
     current: str | None = None
     expected = "a"
-    for number, line in prose_lines(segments):
+    for number, line in prose_lines(doc.segments):
         heading = ID_DEFINITION.match(line)
         if heading:
             current, expected = heading.group(1), "a"
@@ -131,82 +147,99 @@ def check_clauses(path: Path, segments: list[Segment], defined: list[str]) -> li
         rule, letter = marker.groups()
         if rule != current:
             problems.append(
-                f"{path}:{number}: clause {rule}{letter} outside requirement {rule}"
+                f"{doc.path}:{number}: clause {rule}{letter} outside requirement {rule}"
             )
             continue
         if letter != expected:
             problems.append(
-                f"{path}:{number}: clause {rule}{letter}, expected {rule}{expected}"
+                f"{doc.path}:{number}: clause {rule}{letter}, expected {rule}{expected}"
             )
         expected = chr(ord(letter) + 1)
-        markers.add(rule + letter)
-    letters = {identifier[0] for identifier in defined}
-    for number, line in prose_lines(segments):
-        for token in CLAUSE_TOKEN.findall(line):
-            if token[0] in letters and token not in markers:
-                problems.append(f"{path}:{number}: unresolved clause ID {token}")
+        doc.markers.add(rule + letter)
     return problems
 
 
-def check_version(path: Path, lines: list[str], segments: list[Segment]) -> list[str]:
+def check_references(doc: Document, ids: set[str], markers: set[str]) -> list[str]:
+    """Every requirement or clause reference resolves to a definition in some checked file."""
+    problems = []
+    letters = {identifier[0] for identifier in ids}
+    for number, line in prose_lines(doc.segments):
+        for token in ID_TOKEN.findall(line):
+            if token[0] in letters and token not in ids:
+                problems.append(
+                    f"{doc.path}:{number}: unresolved requirement ID {token}"
+                )
+        for token in CLAUSE_TOKEN.findall(line):
+            if token[0] in letters and token not in markers:
+                problems.append(f"{doc.path}:{number}: unresolved clause ID {token}")
+    return problems
+
+
+def check_version(doc: Document) -> list[str]:
     version = next(
-        (m.group(1) for line in lines if (m := VERSION_LINE.match(line))), None
+        (m.group(1) for line in doc.lines if (m := VERSION_LINE.match(line))), None
     )
     if version is None:
         return []
     problems = []
-    for start, kind, text in segments:
+    for start, kind, text in doc.segments:
         if kind != "json":
             continue
         for offset, line in enumerate(text.split("\n")):
             for value in STANDARD_VALUE.findall(line):
                 if value != version:
                     problems.append(
-                        f"{path}:{start + offset}: example claims standard {value},"
+                        f"{doc.path}:{start + offset}: example claims standard {value},"
                         f" header says {version}"
                     )
     return problems
 
 
-def check_lines(path: Path, lines: list[str]) -> list[str]:
+def check_lines(doc: Document) -> list[str]:
     problems = []
-    for number, line in enumerate(lines, start=1):
+    for number, line in enumerate(doc.lines, start=1):
         if "—" in line:
-            problems.append(f"{path}:{number}: em dash")
+            problems.append(f"{doc.path}:{number}: em dash")
         if line != line.rstrip(" \t"):
-            problems.append(f"{path}:{number}: trailing whitespace")
+            problems.append(f"{doc.path}:{number}: trailing whitespace")
         if line.lstrip(" ").startswith("|") and line.startswith(" "):
-            problems.append(f"{path}:{number}: indented table row")
+            problems.append(f"{doc.path}:{number}: indented table row")
     return problems
 
 
-def check_file(path: Path) -> list[str]:
-    lines = path.read_text(encoding="utf-8").split("\n")
-    segments = split_fences(lines)
-    id_problems, defined = check_ids(path, segments)
-    return (
-        check_json_blocks(path, segments)
-        + id_problems
-        + check_clauses(path, segments, defined)
-        + check_version(path, lines, segments)
-        + check_lines(path, lines)
-    )
+def keyword_counts(doc: Document) -> str:
+    text = "\n".join(doc.lines)
+    counts = (len(re.findall(rf"\b{word}\b", text)) for word in KEYWORDS)
+    return " ".join(f"{word} {count}" for word, count in zip(KEYWORDS, counts))
 
 
 def main(argv: list[str]) -> int:
     paths = [Path(argument) for argument in argv] or [DEFAULT_FILE]
     problems: list[str] = []
+    docs: list[Document] = []
     for path in paths:
         if not path.is_file():
             problems.append(f"{path}: not a file")
             continue
-        problems.extend(check_file(path))
+        doc = load(path)
+        problems.extend(collect_ids(doc))
+        problems.extend(collect_clauses(doc))
+        docs.append(doc)
+    ids = {identifier for doc in docs for identifier in doc.defined}
+    markers = {marker for doc in docs for marker in doc.markers}
+    for doc in docs:
+        problems.extend(check_json_blocks(doc))
+        problems.extend(check_references(doc, ids, markers))
+        problems.extend(check_version(doc))
+        problems.extend(check_lines(doc))
     for problem in problems:
         print(problem, file=sys.stderr)
     if problems:
         print(f"{len(problems)} problem(s) in {len(paths)} file(s)", file=sys.stderr)
         return 1
     print(f"ok: {len(paths)} file(s) checked")
+    for doc in docs:
+        print(f"{doc.path.name}: {keyword_counts(doc)}")
     return 0
 
 

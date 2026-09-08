@@ -127,18 +127,18 @@ Discovery is layered: `--help` under D3, the introspection command under D5, and
 
 ### D6: The introspection index MUST let callers choose a command safely.
 
-**D6a** The index MUST contain the fields in the table below.
+**D6a** The index fields are defined below.
 
-| Field | Type | Contract |
-|---|---|---|
-| `schema_version` | string | Introspection format version. |
-| `tool_version` | string | The version string, which `--version` output MUST contain; D4d recommends printing exactly that string. |
-| `conformance` | object | Conformance claim: the standard version checked against, the claimed extensions, and an optional coverage scope (D6c). |
-| `global_flags` | array | I1 flag descriptors accepted by every command. D7 `flags` MUST NOT repeat them. Excludes `--help` and `--version`, which D3b and D4d already require. |
-| `format_defaults` | object | O2 default format for each output context. |
-| `exit_codes` | object | F1 tool-wide exit code meanings. MUST contain the decimal-string keys of the F1a table and the substitutes B4a requires. |
-| `commands` | array | Flat routing list of every command the tool itself dispatches, by full path, sorted by `name` in Unicode code point order; excludes the introspection command. Group prefixes that dispatch nothing themselves are not entries. Commands provided by external executables MAY be omitted only when the tool itself dispatches at least one command and the omitted executables are optional additions installed by the caller; the tool MUST document that they are omitted. |
-| `command` | object | Present exactly when the tool has one unnamed command: that command's detail. D7 binds it when the claim covers the command; outside the claim it matches the parser under D5b instead (B2c). |
+| Field | JSON type | Presence | Value and meaning |
+|---|---|---|---|
+| `schema_version` | string | MUST, always | Introspection format version. |
+| `tool_version` | string | MUST, always | The version string, which `--version` output MUST contain; D4d recommends printing exactly that string. |
+| `conformance` | object | MUST, always | Conformance claim: the standard version checked against, the claimed extensions, and an optional coverage scope (D6c). |
+| `global_flags` | array | MUST, always | I1 flag descriptors accepted by every command. D7 `flags` MUST NOT repeat them. Excludes `--help` and `--version`, which D3b and D4d already require. |
+| `format_defaults` | object | MUST, always | O2 default format for each output context. |
+| `exit_codes` | object | MUST, always | F1 tool-wide exit code meanings. MUST contain the decimal-string keys of the F1a table and the substitutes B4a requires. |
+| `commands` | array | MUST, always | Flat routing list of every command the tool itself dispatches, by full path, sorted by `name` in Unicode code point order; excludes the introspection command. Group prefixes that dispatch nothing themselves are not entries. Commands provided by external executables MAY be omitted only when the tool itself dispatches at least one command and the omitted executables are optional additions installed by the caller; the tool MUST document that they are omitted. |
+| `command` | object | MUST, exactly when the tool has one unnamed command | Detail of the unnamed command. D7 binds it when the claim covers the command; outside the claim it matches the parser under D5b instead (B2c). |
 
 **D6b** Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `name` MUST consist of non-empty segments separated by exactly one U+0020, or be `""` for the unnamed command, and MUST be unique within `commands`. `description` MUST distinguish neighboring commands, and `effects` is the R1a value. An entry MAY contain `conforming: false` under B2a; omitted, it means `true`.
 
@@ -146,23 +146,23 @@ Discovery is layered: `--help` under D3, the introspection command under D5, and
 
 ### D7: Command detail MUST expose the command contracts.
 
-Fields marked `always` in the table below MUST be present. A conditional field MUST be present when its condition is true and MUST NOT be present otherwise.
+For conditional fields in this table, the presence condition is exact: the field MUST NOT be present when its condition is false.
 
 | Field | JSON type | Presence | Value and meaning |
 |---|---|---|---|
-| `name` | string | always | Full command path, or `""` for a tool with one unnamed command. |
-| `description` | string | always | One-line purpose. |
-| `args` | array | always | I1 positional argument descriptors, in argument order. |
-| `flags` | array | always | I1 command-specific flag descriptors. Effective flags are D6 `global_flags` plus this array. |
-| `effects` | string | always | The R1a value: `read_only`, `idempotent`, or `non_idempotent`. |
-| `confirm` | boolean | always | MUST be `true` when at least one valid call may require `--yes` under R3a and `false` otherwise. |
-| `interactive` | boolean | always | MUST be `true` when at least one valid call starts an interactive session under I5b and `false` otherwise. |
-| `stream` | boolean | `delegates_stdout` is not `true`, and success emits a record stream | MUST be `true`. `output` describes one record; the stream is bounded and framed under O7. |
-| `delegates_stdout` | boolean | every successful call writes to stdout only the unmodified stdout of a process the command runs | MUST be `true`. `output` and `stream` MUST NOT be present; stdout stays the contract of the process the command runs (O2f). |
-| `output` | object | either success conveys data beyond the exit status or `changed` is required under R5a, and never when `delegates_stdout` is `true` | O4 JSON Schema for the success document or one O7 record. When R5a requires `changed`, MUST declare it with type `boolean`, or with type `["boolean", "null"]` only when R5a permits `null`. |
-| `exit_codes` | object | adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
-| `format_defaults` | object | differs from tool default | O2 output defaults. |
-| `reserved_overrides` | object | the command retains a reserved field name under B4c | B4c map from each such reserved field name to the name that carries this standard's meaning. |
+| `name` | string | MUST, always | Full command path, or `""` for a tool with one unnamed command. |
+| `description` | string | MUST, always | One-line purpose. |
+| `args` | array | MUST, always | I1 positional argument descriptors, in argument order. |
+| `flags` | array | MUST, always | I1 command-specific flag descriptors. Effective flags are D6 `global_flags` plus this array. |
+| `effects` | string | MUST, always | The R1a value: `read_only`, `idempotent`, or `non_idempotent`. |
+| `confirm` | boolean | MUST, always | MUST be `true` when at least one valid call may require `--yes` under R3a and `false` otherwise. |
+| `interactive` | boolean | MUST, always | MUST be `true` when at least one valid call starts an interactive session under I5b and `false` otherwise. |
+| `stream` | boolean | MUST, when `delegates_stdout` is not `true`, and success emits a record stream | MUST be `true`. `output` describes one record; the stream is bounded and framed under O7. |
+| `delegates_stdout` | boolean | MUST, when every successful call writes to stdout only the unmodified stdout of a process the command runs | MUST be `true`. `output` and `stream` MUST NOT be present; stdout stays the contract of the process the command runs (O2f). |
+| `output` | object | MUST, when either success conveys data beyond the exit status or `changed` is required under R5a, and never when `delegates_stdout` is `true` | O4 JSON Schema for the success document or one O7 record. When R5a requires `changed`, MUST declare it with type `boolean`, or with type `["boolean", "null"]` only when R5a permits `null`. |
+| `exit_codes` | object | MUST, when the command adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
+| `format_defaults` | object | MUST, when the command default differs from the tool default | O2 output defaults. |
+| `reserved_overrides` | object | MUST, when the command retains a reserved field name under B4c | B4c map from each such reserved field name to the name that carries this standard's meaning. |
 
 This example shows how the index and command detail fit together; the contract is in D6 and D7. The `mytool` examples in this document are independent fragments; each agrees with its own requirement, not with the others.
 Fields follow the table order for readability; JSON object order is not part of the contract.
@@ -317,18 +317,18 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 
 **I1a** D6 `global_flags` and D7 `args` and `flags` MUST expose it as a descriptor with the fields in the table below.
 
-| Field | Type | Rule |
-|---|---|---|
-| `name` | string | MUST be present. Flag names omit leading hyphens; one character renders as `-n`, while longer names render as `--name`. |
-| `description` | string | MUST be present. One line stating what the input controls. |
-| `type` | string | MUST be present and equal `string`, `integer`, `number`, or `boolean`. |
-| `required` | boolean | MUST be present. `true` means the caller must provide the input. |
-| `default` | scalar or array | MUST be present when the parser supplies an actual default; run-time and sentinel values are not defaults (I1c). |
-| `enum` | array | MUST be present and list every choice when the parser declares a closed choice set. Every item MUST match `type`. |
-| `aliases` | array | MAY appear on flags and contain alternative names without leading hyphens. Alias rendering follows `name`. |
-| `variadic` | boolean | MAY be `true` only on the last argument. It consumes the remaining positional values as an ordered array; with `required: true`, it consumes at least one. |
-| `repeatable` | boolean | MAY be `true` only on flags. It allows repeated occurrences and resolves their values to an ordered array. |
-| `accepts_stdin` | boolean | MUST be `true` when `-` selects stdin instead of a file. |
+| Field | JSON type | Presence | Value and meaning |
+|---|---|---|---|
+| `name` | string | MUST, always | Flag names omit leading hyphens; one character renders as `-n`, while longer names render as `--name`. |
+| `description` | string | MUST, always | One line stating what the input controls. |
+| `type` | string | MUST, always | One of `string`, `integer`, `number`, or `boolean`. |
+| `required` | boolean | MUST, always | `true` means the caller must provide the input. |
+| `default` | string, number, boolean, or array | MUST, when the parser supplies an actual default | The built-in default; run-time and sentinel values are not defaults (I1c). |
+| `enum` | array | MUST, when the parser declares a closed choice set | Lists every choice. Every item MUST match `type`. |
+| `aliases` | array | MAY, on flags | Alternative names without leading hyphens. Alias rendering follows `name`. If omitted, there are no aliases. |
+| `variadic` | boolean | MAY | MUST NOT be `true` except on the last argument. It consumes the remaining positional values as an ordered array; with `required: true`, it consumes at least one. If omitted, means `false`. |
+| `repeatable` | boolean | MAY | MUST NOT be `true` except on flags. It allows repeated occurrences and resolves their values to an ordered array. If omitted, means `false`. |
+| `accepts_stdin` | boolean | MUST, when `-` selects stdin instead of a file | `true` when `-` selects stdin instead of a file. If omitted, means `false`. |
 
 **I1b** A flag with `type: boolean` MUST set its value to `true` when given by its bare name and MUST NOT consume the following argument as its value; it MAY also accept both `--name=true` and `--name=false`.
 
@@ -341,9 +341,7 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 - A value resolved at run time, from I2 sources or from the environment, such as the working directory or the newest available version, MUST be omitted and described in `description`.
 - A parser sentinel meaning "not provided", including `null`, is not a default and MUST be omitted.
 
-**I1d** Omitted `variadic`, `repeatable`, and `accepts_stdin` mean `false`; omitted `aliases` means no aliases.
-
-**I1e** Descriptor descriptions follow these rules:
+**I1d** Descriptor descriptions follow these rules:
 
 - Any accepted value syntax, bound, path-resolution rule, dependency, conflict, or dynamic value-discovery path not expressed by another descriptor field MUST be stated in `description`.
 - When exactly one of two related descriptors is command-specific, its `description` MUST state the relationship.
@@ -430,7 +428,7 @@ Run: mytool deploy api --env prod --manifest - --yes
 
 ### I7: Input MUST stay within its declared bounds.
 
-**I7a** Buffered data: a command that buffers caller-controlled input MUST enforce a maximum size before side effects and state it under I1e in the `description` of each input it bounds.
+**I7a** Buffered data: a command that buffers caller-controlled input MUST enforce a maximum size before side effects and state it under I1d in the `description` of each input it bounds.
 
 **I7b** Restricted paths: a command limited to declared roots MUST resolve each supplied path and reject it when it escapes those roots, including through `..` or a symbolic link.
 
@@ -849,14 +847,14 @@ The final row places the object on the last non-empty line of `error.log`. `NO_I
 
 **F3a** The document MUST contain exactly one top-level field, `error`, whose value is an object with the fields in the table below. Its `kind` is the only stable match target; message text is not a stable interface.
 
-| Field | Presence | Contract |
-|---|---|---|
-| `kind` | MUST | String with stable machine meaning; the values in the `kind` table below have shared meanings. |
-| `message` | MUST | String identifying the failed operation and cause. |
-| `retryable` | MAY | Boolean; `true` only when the same call may resolve the failure without duplicating an intended effect (F3b). |
-| `action` | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
-| `hint` | SHOULD | String recovery step, present when one concrete step is known (F3b). |
-| `context` | MAY | Object containing machine-readable values needed for recovery. R7a, R7d, and M1b require it for the failures they name; F3b and F4b recommend fields in it. |
+| Field | JSON type | Presence | Value and meaning |
+|---|---|---|---|
+| `kind` | string | MUST, always | Stable machine meaning; the values in the `kind` table below have shared meanings. |
+| `message` | string | MUST, always | Identifies the failed operation and cause. |
+| `retryable` | boolean | MAY | `true` only when the same call may resolve the failure without duplicating an intended effect (F3b). |
+| `action` | string | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
+| `hint` | string | SHOULD, when one concrete recovery step is known | Recovery step (F3b). |
+| `context` | object | MAY; required for the failures named in R7a, R7d, and M1b | Machine-readable values needed for recovery. F3b and F4b recommend fields in it. |
 
 **F3b** Recovery fields follow these rules:
 

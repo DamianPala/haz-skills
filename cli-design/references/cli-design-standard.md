@@ -972,6 +972,8 @@ A caller that received one page or one run of records can continue from where it
 
 ### C1: Collections MUST page by opaque cursor.
 
+This requirement applies to a collection bounded under O6b; a collection with a documented finite maximum returns every item and has no page to resume.
+
 **C1a** Contract: the command MUST accept `--cursor`, and each JSON page MUST contain `next_cursor`, an opaque string that the caller passes unchanged to `--cursor`, or `null` exactly when `has_more` is `false`.
 
 **C1b** Binding: source (the command path and the data set it reads), filters, and order MUST remain unchanged when using `--cursor`; the limit and output format MAY change.

@@ -32,7 +32,7 @@ Italics mark a term defined in this section.
   - a document command has `output` and does not declare `stream: true`;
   - a stream command declares `stream: true`;
   - a silent command has neither `output` nor `delegates_stdout: true`;
-  - a delegating command declares `delegates_stdout: true`.
+  - a delegating command runs another program and passes its stdout through unchanged; it declares `delegates_stdout: true`.
 - **Structured output.** Stdout written in a machine-readable format: a single document (O5a) or a record stream (O7). A structured success is a success that writes it.
 - **Fail with a `kind`.** To fail with a `kind` is to exit non-zero and, wherever structured errors are demanded (F2), emit a structured error object (F3) with that `kind`; other requirements cite this definition.
 - **Reserved field name.** A field name this standard defines with a meaning in success output: `changed`, `cursor`, `has_more`, `items`, `next`, `next_cursor`, `output_file`, `requires_confirmation`, `status`, `targets`, and `truncated`.
@@ -751,15 +751,31 @@ A D7 excerpt for a command that runs a caller-supplied program and passes its st
 }
 ```
 
+If `report.py` prints `3 services`, this command passes that text through even with `--json`:
+
+```console
+$ mytool run --json -- python report.py
+3 services
+```
+
 ### O3: The output streams MUST have separate roles.
 
-**O3a:** Channels: stdout MUST contain only the result; stderr MUST carry logs, warnings, progress, prompts, and errors. `--quiet` and `--verbose`, when accepted, change only stderr diagnostics. A *document or stream command* whose product is a change to a file system or an external system MUST report that product through its D7 `output`; the product itself is not the result on stdout. For example, `mytool init --json` creates a directory and reports `{"path": "/work/app", "changed": true}` rather than writing the directory's contents to stdout.
+**O3a:** Channels: stdout MUST contain only the result; stderr MUST carry logs, warnings, progress, prompts, and errors.
+`--quiet` and `--verbose`, when accepted, change only stderr diagnostics.
+A *document or stream command* that is intended to change a file system or an external system MUST report that change in the result described by its `output` schema (D7).
+For example, `mytool init --json` creates a directory and reports `{"path": "/work/app", "changed": true}` rather than writing the directory's contents to stdout.
 
 **O3b:** Decoration: machine-readable stdout MUST contain only output in the selected stdout format, without banners, terminal decoration, or ANSI escapes. Animated progress MAY appear only when stderr is a TTY. On non-TTY stderr, progress MUST use complete plain lines or be omitted.
 
 **O3c:** Consistency: human and machine renderings MAY differ in detail but MUST NOT contradict each other. When human-readable output is only a bounded preview of the result, it MUST say so and identify how to retrieve the complete result.
 
-**O3d:** Untrusted content: machine output MUST serialize caller-controlled and remote values through the selected stdout format. Human output MUST escape terminal control sequences in those values.
+**O3d:** Untrusted content: values supplied by the caller or received from a remote source need different handling in machine-readable and human-readable output:
+
+- Machine-readable output MUST encode these values using the selected stdout format's serialization rules.
+- Human-readable output MUST escape terminal control sequences in these values so the terminal displays them as text instead of acting on them.
+
+For example, a name containing a double quote, `team "blue"`, becomes `"team \"blue\""` as a JSON string.
+If a remote message contains an escape sequence that clears the screen, human-readable output shows a visible representation of that sequence instead of clearing the screen.
 
 ### O4: A command schema MUST describe its JSON success value.
 
@@ -827,13 +843,23 @@ A bounded single value may instead report:
 
 ### O6: Potentially unbounded document collections MUST be bounded.
 
-This requirement applies to document collections; it first sets aside mutation target lists (O6a).
+This requirement limits how many items a document collection returns in one call.
+Lists of mutation targets are handled separately (O6a).
 
-**O6a:** An R4 target list, in a preview or in the mutation's own result, is not a collection under this requirement; a command that caps it reports truncation and, when it truncates, a file holding the complete value (O5c).
+**O6a:** The list of mutation targets described in the preview rules (R4) is exempt from this requirement, whether returned by a preview or by the mutation itself.
+A command that may shorten this list follows the single-value truncation rules (O5c): report whether the list was shortened and, if so, provide a file containing the complete list.
 
-**O6b:** Window: a collection without a documented finite maximum MUST use a finite default limit and accept `--limit`. The tool MUST bound the number of items, not silently omit fields from individual items. An explicit `--limit` is the maximum number of items returned by that call.
+For example, a deletion preview may show 20 of its 500 targets and provide a file listing all 500.
+That preview uses the truncation fields, not the collection's `items` and `has_more` wrapper.
 
-**O6c:** Shape: a bounded collection MUST be an object with an `items` array and a boolean `has_more` that is `true` exactly when matching items exist beyond those returned. A collection with a documented finite maximum MAY use a bare array. An empty collection MUST use the same shape with an empty array, not `null` or absent output.
+**O6b:** Window: if a collection has no documented finite maximum size, the command MUST use a finite default limit and accept `--limit`.
+The tool MUST limit the number of items returned, without silently removing fields from individual items.
+An explicit `--limit N` allows at most N items in that call's result.
+
+**O6c:** Shape: a bounded collection MUST be an object with an `items` array and a boolean `has_more`.
+`has_more` is `true` exactly when more matching items exist beyond those returned, and `false` otherwise.
+A collection with a documented finite maximum MAY use a bare array.
+An empty collection MUST keep its usual shape with an empty array, rather than return `null` or no output.
 
 Resuming a collection beyond one page falls under the `continuation` extension (C1).
 
@@ -853,7 +879,12 @@ $ mytool jobs list --limit 2 --json
 }
 ```
 
-Non-normative example: assume one tool exposes both commands and does not claim `continuation`. `regions list` documents a maximum of three regions and returns all configured regions, here `["east","west"]`; O6b does not require `--limit` for this command. `jobs list` has two matching jobs today but no documented finite maximum. It accepts `--limit` and uses a finite default limit of 100, so its page is `{"items":[{"id":"job_1"},{"id":"job_2"}],"has_more":false}`. The current item count is not a documented maximum.
+Non-normative example: assume one tool exposes both commands and does not claim `continuation`:
+
+- `regions list` documents a maximum of three regions and returns all configured regions, here `["east","west"]`. The collection limit rule (O6b) does not require `--limit` for this command.
+- `jobs list` has two matching jobs today but no documented finite maximum. It accepts `--limit` and uses a finite default limit of 100, so its page is `{"items":[{"id":"job_1"},{"id":"job_2"}],"has_more":false}`.
+
+The current item count is not a documented maximum.
 
 ### O7: Record streams MUST be bounded and framed.
 

@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.1.0-draft.7
+**Version:** 0.1.0-draft.8
 
 ## Scope
 
@@ -71,19 +71,19 @@ By goal:
 |---|---|---|
 | Implement a new tool | [Scope](#scope) and [Terms](#terms), then the stages in order; the introspection contracts (D6, D7) are what the later stages fill in | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
 | Audit a conformance claim | [Conformance](#conformance), then the D6 `conformance` field, then D7 for each covered command | [Scope](#scope) through [Stage H](#stage-h-human-interface); [Existing tools](#existing-tools); each claimed extension |
-| Look up a flag name, a D7 field, or a `kind` | H1b, D7, F3c | [Stage H](#stage-h-human-interface), [Stage D](#stage-d-discovery-and-introspection), [Stage F](#stage-f-failure) |
+| Look up a flag name, a command-detail field, or an error `kind` | Canonical flag names (H1b), command-detail fields (D7), and error kinds (F3c) | [Stage H](#stage-h-human-interface), [Stage D](#stage-d-discovery-and-introspection), [Stage F](#stage-f-failure) |
 | Adopt a tool with a released contract | [Existing tools](#existing-tools), B1 to B4, before anything else, then as for a new tool | [Existing tools](#existing-tools), then [Scope](#scope) through [Stage H](#stage-h-human-interface) |
 
 By tool shape:
 
 | Tool shape | How the tool shape affects applicability | Sections to read |
 |---|---|---|
-| Every command read-only | R1, R6, R7 under their own conditions; the mutation requirements (R2 to R5) do not apply | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
-| Some commands mutate state | R1 for every command; R2 to R5 for the commands that mutate; R6 and R7 under their own conditions | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
-| A *stream command* | O7 for that command in place of O5a, O5c, and O6, with O5b and O5d per record; the plain-output requirement for collections (H5) does not apply to it | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
-| An *accepting call* | R7, and I8 for a call that waits | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
-| [`managed`](#extension-managed-accepted-work-must-be-observable) claimed | R7 first, then M1 to M3; the wait command carries a deadline (I8b), and a listing of operations (M1f) is a collection (O6, H5) | [Scope](#scope) through [Stage H](#stage-h-human-interface), then Extension [`managed`](#extension-managed-accepted-work-must-be-observable) |
-| [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) claimed | C1 after O6, for a collection bounded under O6b; C2 after O7, for a *stream command* | [Scope](#scope) through [Stage H](#stage-h-human-interface), then Extension [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) |
+| Every command read-only | Effect classification (R1), built-in retries (R6), and accepted work (R7) apply under their own conditions; the mutation safeguards and reporting rules (R2 to R5) do not apply | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
+| Some commands mutate state | Effect classification (R1) applies to every command; the mutation safeguards and reporting rules (R2 to R5) apply to commands that mutate; built-in retries (R6) and accepted work (R7) apply under their own conditions | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
+| A *stream command* | The record-stream rules (O7) apply to that command in place of document encoding, bounded inline values, and collection bounds (O5a, O5c, O6), with the value and timestamp rules (O5b, O5d) applying per record; plain collection output (H5) does not apply | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
+| An *accepting call* | The accepted-work rules (R7) apply, as do the external-work bounds (I8) when a call waits | [Scope](#scope) through [Stage H](#stage-h-human-interface) |
+| [`managed`](#extension-managed-accepted-work-must-be-observable) claimed | Read the accepted-work rules (R7) first, then the managed-operation rules (M1 to M3); the wait command accepts a timeout (I8b), and operation listings (M1f) follow the collection bounds (O6) and plain-output recommendation (H5) | [Scope](#scope) through [Stage H](#stage-h-human-interface), then Extension [`managed`](#extension-managed-accepted-work-must-be-observable) |
+| [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) claimed | Read collection continuation (C1) after collection bounds (O6), for a collection bounded under the finite-window rule (O6b); read stream continuation (C2) after the record-stream rules (O7), for a *stream command* | [Scope](#scope) through [Stage H](#stage-h-human-interface), then Extension [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) |
 
 ## Stage D: Discovery and introspection
 
@@ -121,7 +121,7 @@ Discovery is layered: `--help` under D3, the introspection command under D5, and
 
 **D5c:** Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts. It MAY accept global flags without applying them.
 
-**D5d:** Routing: the introspection command alone MUST return the D6 index.
+**D5d:** Routing: the introspection command alone MUST return the introspection index (D6).
 When followed by a command path, it MUST return command detail.
 For a command outside the conformance claim, that detail still matches the parser (D5b), but the D7 requirements do not apply (B2c).
 A command path consists of the segments in D6 `commands[].name`, separated by spaces (U+0020).
@@ -182,7 +182,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.7", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.8", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -252,7 +252,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.7", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.8", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -284,7 +284,7 @@ $ hashfile schema
 
 **D9a:** Continuation vectors follow these rules:
 
-- In structured output, `next` MUST be a non-empty array of strings forming a complete argv vector that can be executed without a shell.
+- In structured output, `next` MUST be a non-empty array of strings forming a complete argument list (`argv`): the executable followed by its arguments, ready to execute without a shell.
 - For the executable, `next[0]` is the tool's canonical executable name; a caller that invoked the tool by path substitutes it.
 - If the next call needs a credential or configuration source selected by a flag on the initiating call, `next` MUST include that flag with a value selecting the same source. It MAY use `-` for stdin. A path value MUST use the resolved location. The vector never contains the data read from stdin.
 - A command that may emit `next` MUST declare it as an optional field in its D7 output schema.
@@ -404,7 +404,7 @@ This explains their interaction before the caller runs the command.
 
 **I2b:** Precedence: when more than one source provides a value, resolution MUST be deterministic and documented. It SHOULD follow this order: `flags > environment > project configuration > user configuration > built-in defaults`.
 
-**I2c:** Inspection: layered configuration SHOULD expose each resolved value and its source and, when the source has a location, its resolved location, while masking secrets. D9a's complete vector depends on the same per-setting provenance.
+**I2c:** Inspection: layered configuration SHOULD expose each resolved value and its source and, when the source has a location, its resolved location, while masking secrets. The complete argument list for the next call relies on the same record of where each setting came from (D9a).
 
 Example: `--log-level debug` overrides `MYTOOL_LOG_LEVEL=info`, which overrides `log_level = "warning"` in project configuration and `log_level = "error"` in user configuration.
 
@@ -440,8 +440,7 @@ With `--token-file token.txt` under `--verbose`, a diagnostic may name the sourc
 - If required input or confirmation is still missing, the command MUST fail with an error that names a flag, file, stdin form, or environment variable that can supply it.
 - A command MUST NOT treat a missing prompt, an unanswered prompt, or end of input as consent.
 
-For example, stdin supplies the manifest, so the command cannot prompt for confirmation.
-It fails and names `--yes`, the explicit confirmation flag (R3):
+For example, assume deployment requires confirmation and stdin supplies the manifest. The command cannot prompt, so it fails and names the explicit confirmation flag, `--yes` (R3):
 
 ```console
 $ mytool deploy api --env prod --manifest - < manifest.json
@@ -547,7 +546,7 @@ For example, a delete by stable identifier whose repeat succeeds with `changed: 
 
 A status read that only records that a worker has already exited can remain `read_only`; stopping the worker as part of the read changes intended state.
 
-### R2: Mutation safeguards MUST match the blast radius.
+### R2: Mutation safeguards MUST match the possible damage.
 
 **R2a:** A mutation is wide when it can affect existing targets the caller did not name individually. Targets necessarily included by a documented dependency relationship from individually named targets do not by themselves make a mutation wide. It is irreversible when the tool provides no documented operation that restores the prior state.
 
@@ -592,7 +591,7 @@ $ mytool services delete api --json
 {"error":{"kind":"precondition_failed","message":"Service 'api' still has 2 running deployments","hint":"Repeat with --force to delete it anyway"}}
 ```
 
-A *gated call* in a *non-interactive context*, here with `--json` and no TTY on stdin, stops before side effects and fails with an F3 object on stderr; under R4, the same command previews without `--yes`:
+A *gated call* in a *non-interactive context*, here selected by `--json` with stdin redirected from `/dev/null`, stops before side effects and fails with a structured error object on stderr (F3):
 
 ```console
 $ mytool services prune --env staging --json < /dev/null
@@ -715,7 +714,7 @@ The tool declares its default formats (O2a), accepts `--json` (O2b), and chooses
 An explicit format flag overrides the default (O2d).
 The remaining clauses cover writing the result to a file (O2e) and passing through another process's stdout (O2f).
 
-**O2a:** Declaration: D6 `format_defaults` MUST declare `tty` and `non_tty` format names. D7 `format_defaults` MUST appear only when a command differs from those tool-wide defaults. For a *stream command* the machine-readable format name is `ndjson`; that implied name does not by itself make the command differ from the tool-wide defaults.
+**O2a:** Declaration: the introspection index's `format_defaults` field (D6) MUST declare `tty` and `non_tty` format names. A command detail's `format_defaults` field (D7) MUST appear only when that command differs from the tool-wide defaults. For a *stream command*, the machine-readable format name is `ndjson`; that implied name does not by itself make the command differ from the tool-wide defaults.
 
 **O2b:** Machine access: every command MUST accept `--json`. On a *silent command*, `--json` selects the `json` format, and a success MUST write no bytes to stdout. If a command also accepts `--format`, `--json` MUST produce the same output as `--format json` or, on a *stream command*, as `--format ndjson`.
 
@@ -898,7 +897,7 @@ This requirement applies to a *stream command*.
 - A stream without a documented finite maximum MUST use a finite default window and accept at least one of `--limit`, `--head`, or `--tail`.
 - `--limit N` is the maximum number of records emitted from the selected position in the documented order; it does not select that position.
 - `--head N` selects the first N matching records and `--tail N` selects the last N matching records. A command MAY accept any subset of `--limit`, `--head`, and `--tail`.
-- Its D7 descriptions MUST state the default window and how each accepted selector combines with `--follow`; unsupported combinations are usage errors under I6a.
+- The command's descriptions in command detail (D7) MUST state the default window and how each accepted selector combines with `--follow`; unsupported combinations are usage errors under the conflicting-input rule (I6a).
 - `--follow`, an unbounded mode selected explicitly under I8c, removes the default window when offered. An explicit `--limit` remains effective with or without `--follow` and ends the read after N records.
 - Reaching a finite window that ends the read does not end the record source.
 
@@ -926,7 +925,7 @@ A failure has two faces: what the process reports through its exit status (F1), 
 
 ### F1: Exit codes MUST be stable and documented.
 
-**F1a:** The codes in the table below MUST have these meanings. D6 `exit_codes` carries the tool-wide meaning of every code the tool returns; a code whose meaning belongs to one command alone is added in that command's D7 `exit_codes` under F1e.
+**F1a:** The codes in the table below MUST have these meanings. The introspection index's `exit_codes` field (D6) carries the tool-wide meaning of every code the tool returns. A code whose meaning belongs to one command alone is added to that command's `exit_codes` field in command detail (D7), under the command-specific-code rule (F1e).
 
 | Code | Meaning |
 |---|---|
@@ -940,7 +939,7 @@ For that command, exit `0` MUST mean true and the additional code MUST mean fals
 Both answers are successful outcomes, so neither requires a structured error under F2 or F3.
 The observed result required by F1c is the answer itself.
 
-**F1c:** Exit `0` MUST mean the command observed its documented postcondition through the interface it used. Independent re-verification is not required. For an *accepting call*, acceptance leaves an identifiable operation (R7); when the initiating command waits, it fails when the work does not succeed (R7d), and so does the wait command under `managed` (M1).
+**F1c:** Exit `0` MUST mean the command observed, through the interface it used, the documented condition that defines success. Independent re-verification is not required. For an *accepting call*, acceptance leaves an identifiable operation under the accepted-work rules (R7). When the initiating command waits, it fails if the work does not succeed (R7d), as does the wait command under the `managed` extension (M1).
 
 **F1d:** Additional codes MUST each have one stable meaning. Fine-grained failures MUST use F3 `kind` instead.
 
@@ -986,10 +985,10 @@ The final row places the object on the last non-empty line of `error.log`. `NO_I
 |---|---|---|---|
 | `kind` | string | MUST, always | Stable machine meaning; the values in the `kind` table below have shared meanings. |
 | `message` | string | MUST, always | Identifies the failed operation and cause. |
-| `retryable` | boolean | MAY | `true` only when the same call may resolve the failure without duplicating an intended effect (F3b). |
+| `retryable` | boolean | MAY | `true` only when the same call may resolve the failure without duplicating an intended effect; if omitted, the caller has no assurance that repeating the call is safe (F3b). |
 | `action` | string | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
 | `hint` | string | SHOULD, when one concrete recovery step is known | Recovery step (F3b). |
-| `context` | object | MAY; required for the failures named in R7a, R7d, and M1b | Machine-readable values needed for recovery. F3b and F4b recommend fields in it. |
+| `context` | object | MAY; required for accepted-work or wait-command failures as specified in R7a, R7d, and M1b | Machine-readable values needed for recovery. The recovery-field and partial-result rules (F3b, F4b) recommend fields in it. |
 
 **F3b:** Recovery fields follow these rules:
 
@@ -1099,7 +1098,12 @@ A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documente
 
 ### H4: Color MUST remain optional.
 
-**H4a:** This clause does not govern a *delegating command*'s stdout; it still governs the tool's own stderr decoration. A tool that emits terminal escape sequences MUST omit them all when `TERM` is `dumb` or the output stream is not a TTY, and omit color when `NO_COLOR` is non-empty; other styling MAY remain under `NO_COLOR`. A flag or a documented setting overrides that default on human-readable output only, on each stream classified on its own. Color MUST NOT be the only carrier of information.
+**H4a:** This clause does not govern a *delegating command*'s stdout; it still governs the tool's own stderr decoration. A tool that emits terminal escape sequences MUST apply these defaults to each stream based on that stream's TTY state:
+
+- omit all terminal escape sequences when `TERM` is `dumb` or the stream is not a TTY;
+- omit color when `NO_COLOR` is non-empty; other styling MAY remain.
+
+A flag or documented setting overrides these defaults only on human-readable output. Color MUST NOT be the only carrier of information.
 
 **H4b:** If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`. `--color always` has no effect on `--plain` output or on format selection.
 
@@ -1130,7 +1134,7 @@ This section is the brownfield path. A tool with a released contract can adopt t
 
 **B1a:** A command path, flag, environment variable, or F3 `kind` is brownfield when it preserves a released contract and greenfield otherwise; these words describe the subject, not the tool. A path added after a tool-wide contract was released inherits that contract and is brownfield with respect to it, and greenfield with respect to everything the path itself introduces. A clause in this section applies with respect to the subject it names.
 
-**B1b:** A brownfield path MAY preserve established behavior when changing it would break existing callers. Behavior that B3 or B4 lets the path keep does not affect the claim; any other retained behavior that violates a requirement makes the command incompatible, and B2 places it outside the claim. A tool that retains an incompatible command SHOULD also provide a documented conforming path for the same operation.
+**B1b:** A brownfield path MAY preserve established behavior when changing it would break existing callers. Retaining behavior allowed by the compatibility exceptions (B3, B4) does not affect the claim. Any other retained behavior that violates a requirement makes the command incompatible, and the claim-exclusion rule (B2) places it outside the claim. A tool that retains an incompatible command SHOULD also provide a documented conforming path for the same operation.
 
 Non-normative example: a tool has a released, tool-wide `--output PATH` contract. A new `reports export` command inherits that contract, so it can retain that destination flag under B3's O2e row. The same command introduces an archive-mode option with no released name; it uses `--archive-mode` under the canonical flag-name rule (H1a). The new command is brownfield with respect to the inherited destination flag and greenfield with respect to its new option.
 
@@ -1155,7 +1159,7 @@ Non-normative example: this fragment of an introspection index limits the claim 
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.1.0-draft.7",
+    "standard": "0.1.0-draft.8",
     "extensions": [],
     "scope": ["services"]
   }
@@ -1186,7 +1190,7 @@ The claim covers `services get` and `services list` unless their entries carry `
 
 **B4a:** When a released contract assigns another meaning to `1` or `2`, the tool MAY keep it. It MUST then document the code it uses for each F1a meaning, and D6 `exit_codes` carries those substitutes under F1a.
 
-**B4b:** A released `kind` whose meaning conflicts with the F3c table MAY be retained; the tool MUST document it as not conforming.
+**B4b:** A released `kind` whose meaning conflicts with the shared error-kind table (F3c) MAY be retained. The tool MUST document that the retained `kind` does not use the meaning defined in that table.
 
 **B4c:** Reserved names follow these rules:
 
@@ -1228,7 +1232,7 @@ A cursor identifies a position in the documented order.
 If that position can no longer be located in that order, continuation is unavailable.
 A position immediately after the last item MAY yield an empty final page.
 
-**C1d:** Order: pagination MUST use a stable, documented order and document whether pages read live state or one fixed snapshot; whether continuation is exact across concurrent insertions and deletions follows from that choice.
+**C1d:** Order: pagination MUST use a stable, documented order and document whether it reads live state or one fixed snapshot. That choice determines whether continuation is exact across concurrent insertions and deletions.
 
 The same page from a tool that declares `continuation`:
 
@@ -1305,7 +1309,7 @@ Non-normative note: cursor-based resume guarantees a continuation position, not 
 
 ## Extension `managed`: Accepted work MUST be observable.
 
-A caller that holds an identifier under R7 can learn the current state of the work, wait for its terminal state, and, where the tool offers them, cancel or suspend it. It builds on accepted work (R7) and wait deadlines (I8), and its terms, *managed operation*, *accepting call*, and *non-interactive context*, are defined in the core.
+A caller that holds the identifier returned for accepted work (R7) can learn the work's current state and wait until it reaches a terminal state, meaning the work has finished. Where the tool offers them, the caller can also cancel or suspend the work. This extension builds on accepted work (R7) and wait deadlines (I8), and its terms, *managed operation*, *accepting call*, and *non-interactive context*, are defined in the core.
 
 ### M1: Managed work MUST expose status and wait.
 
@@ -1313,7 +1317,7 @@ A caller that holds an identifier under R7 can learn the current state of the wo
 
 **M1b:** Results: structured results from both commands MUST contain `status` and the identifier.
 If the wait command fails after argument parsing, its F3 error object MUST carry the identifier and `status` in `context`.
-Here, `status` is the last observed state, or `null` if no state was observed, including when the identifier was not found (M1d).
+In the wait command's error `context` (F3), `status` is the last observed state, or `null` if no state was observed, including when the identifier was not found (M1d).
 The structured success results of both commands SHOULD carry timestamps for two events: when the operation started and when it entered the reported state.
 The timestamp field names are tool-defined; their format follows O5d.
 
@@ -1354,7 +1358,7 @@ Here `unknown` is an observed operation state, `null` records the absence of an 
 
 **M2a:** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a *non-interactive context*, whose name follows the naming preferences in D4b. It MUST accept the identifier returned under R7a, declare `effects: idempotent`, and fall under Stage R.
 
-**M2b:** Structured success MUST contain `status` and the identifier; `changed` reports whether this call caused a new intended state transition, not whether the managed operation completed (R5a). Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation wins the race, it MUST report the actual terminal state.
+**M2b:** Structured success MUST contain `status` and the identifier; `changed` reports whether this call caused a new intended state transition, not whether the managed operation completed (R5a). Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation reaches another terminal state before cancellation completes, the command MUST report that observed terminal state.
 
 A cancellation that is accepted, then observed by the wait command, which fails on stderr because the terminal state is not `succeeded`:
 
@@ -1373,4 +1377,4 @@ $ mytool jobs wait job_123 --timeout 5m --json
 
 **M3a:** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a *non-interactive context*, whose names follow the naming preferences in D4b. Both MUST accept the identifier returned under R7a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
 
-**M3b:** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M2 remains terminal and MUST NOT mean suspension. On an operation that is already terminal, they report the observed terminal state under M2b.
+**M3b:** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M2 remains terminal and MUST NOT mean suspension. For an operation that is already terminal, both commands report the observed terminal state under the cancellation-result rule (M2b).

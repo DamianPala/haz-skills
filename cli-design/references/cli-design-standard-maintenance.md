@@ -30,12 +30,22 @@ Shapes the conformance claim cannot express in this version, each seen in one re
 
 ## Document policy
 
-The standard stays short. Text stays when it helps a reader apply a requirement: it states one, defines a term one uses, resolves an ambiguity in one, shows one working, says why it exists, or says where to read next. Anything else belongs elsewhere or nowhere. Design principles is non-normative and stays short.
+The standard stays short. Text stays when it helps a reader apply a requirement: it states one, defines a term one uses, resolves an ambiguity in one, shows one working, says why it exists, or says where to read next. Anything else belongs elsewhere or nowhere.
+
+Write for a junior software engineer familiar with basic CLI and JSON concepts.
+Use concrete subjects and actions, and explain specialized terms before relying on them.
+Present separate steps or conditions in separate sentences or a list, keeping their scope and exceptions explicit.
+Prerequisite concepts come before definitions that depend on them.
+Design principles is non-normative and stays short; detailed rationale sits beside the requirement it explains.
 
 Accommodations for released contracts live under Existing tools. A requirement elsewhere states the baseline and carries no brownfield qualifier; what a released path may keep is a row or clause in that section, not a condition in the requirement. D6 and D7 may describe the fields that declare retained behavior, and a requirement may point to the accommodation that applies; the permission to retain and its conditions are defined only in Existing tools.
 
 A cross-reference names in words what the referenced rule requires, as far as the referring sentence needs it, and the identifier follows the words, so the sentence still says what applies with the identifier removed. The words carry no normative keyword and add no condition; the identifier stays the address of the rule. When a table defines whether a field is present, another rule refers to that condition instead of imposing it again and states only the behavior it adds.
+In source Markdown, link named sections; keep requirement and clause identifiers as plain text.
 
+An example sits beside the clause it explains and shows the concrete input and outcome needed to resolve the reading problem.
+An example covering several requirements or clauses may sit immediately after the last one it covers.
+Any assumed behavior is stated explicitly.
 Examples are independent fragments unless the text connects them, and an excerpt says that it is one.
 
 A term in Terms names exactly the condition it replaced. When a phrase becomes a term or a definition changes, the old and new conditions are equivalent in both directions, and every use of the term keeps its meaning with the definition expanded in place. A change to a D7 field condition is rechecked against every term that reads that field.
@@ -43,13 +53,16 @@ A term in Terms names exactly the condition it replaced. When a phrase becomes a
 Requirement and clause identifiers are scoped to a version of this document: after inserting, splitting, or removing a clause, later clauses are relettered in reading order and every internal reference still names its intended rule; an external citation names the version.
 
 A readability change keeps every requirement and clause at its identifier and defining place, keeps each field, flag, and `kind` name at the table row that defines it, and keeps tables as the place a reader and an agent look an entry up; an insertion, split, removal, or move of a requirement or clause is its own change under the identifier policy above.
+JSON field-definition tables use `Field`, `JSON type`, `Presence`, and `Value and meaning` columns.
+A field's row states any defined omission meaning.
+Presence conditions distinguish required presence from forbidden presence; neither is a condition on the field's value.
 
 ## Change workflow
 
-1. Classify the change as editorial or contractual. For a contractual change, the maintainers' notes record the caller problem and the P1-P6 decision.
+1. Classify each substantive change as editorial or contractual. An editorial change preserves the subject, required or permitted behavior, applicability conditions, exceptions, and field meanings. If any allowed behavior or caller guarantee changes, classify that part as contractual and record the caller problem and P1-P6 decision in the maintainers' notes.
 2. Make the smallest change that resolves the caller-facing problem.
 3. Read the affected stage in full, every requirement it references, and every passage that references a changed rule; the words before an identifier must still match the rule.
-4. Recheck terminology, examples, data flow, brownfield impact, and compatibility.
+4. Recheck terminology, examples, data flow, brownfield impact, and compatibility. Track the inputs and effects across the operation being described, distinguishing an internal request from the whole CLI call where relevant.
 5. For a material contract change, review one stable draft independently and deduplicate the findings before editing again.
 6. Run the checks below and review the rendered document. Before changing the version, compare the contract with the previous release against the `0.1.x` promise in Conformance and record the decision.
 

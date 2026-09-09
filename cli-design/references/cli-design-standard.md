@@ -65,6 +65,8 @@ The non-normative [maintenance guide](cli-design-standard-maintenance.md) define
 
 This section is not part of conformance. Whether a requirement applies is decided by that requirement's own condition, never by this section; the tables below say where to start and which sections to read. For a new tool, start with the sections through [Stage H](#stage-h-human-interface). [Existing tools](#existing-tools) and the two extensions follow, and each says when it applies.
 
+An **Applies when:** line under a heading gives the condition for that block; beside a clause ID, it covers only that clause. Conditions within a list or table keep their local scope.
+
 By goal:
 
 | Goal | Where to start | Sections to read |
@@ -428,7 +430,7 @@ Example: `--log-level debug` overrides `MYTOOL_LOG_LEVEL=info`, which overrides 
 
 ### I3: Long or generated input MUST use files or stdin, never argv.
 
-**I3a:** A command that accepts a document, script, request body, template, or other unbounded text MUST accept a file path and `-` for stdin.
+**I3a:** **Applies when the command accepts a document, script, request body, template, or other unbounded text.** The command MUST accept a file path and `-` for stdin.
 
 **I3b:** The tool MUST reject a call that selects stdin for more than one input.
 
@@ -505,9 +507,9 @@ The choice of pager follows the user's selection (H3).
 
 ### I7: Input MUST stay within its declared bounds.
 
-**I7a:** Buffered data: a command that buffers caller-controlled input MUST enforce a maximum size before side effects and state it under I1d in the `description` of each input it bounds.
+**I7a:** **Applies when the command buffers caller-controlled input.** It MUST enforce a maximum size before side effects and state it under I1d in the `description` of each input it bounds.
 
-**I7b:** Restricted paths: a command limited to declared roots MUST resolve each supplied path and reject it when it escapes those roots, including through `..` or a symbolic link.
+**I7b:** **Applies when the command limits paths to declared roots.** It MUST resolve each supplied path and reject it when it escapes those roots, including through `..` or a symbolic link.
 
 For example, assume `mytool upload` accepts at most 10 MiB and may read files only from `./dist`; both calls fail with an F3 object on stderr:
 
@@ -628,9 +630,9 @@ $ mytool services prune --env staging --json < /dev/null
 
 ### R4: Wide mutations MUST be previewable.
 
-**R4a:** The command MUST provide `--dry-run`.
+**R4a:** **Applies when the command performs a wide mutation.** The command MUST provide `--dry-run`.
 
-**R4b:** On any command that accepts it, a `--dry-run` call MUST leave intended state unchanged and follow these outcome rules:
+**R4b:** **Applies when the command accepts `--dry-run`.** A `--dry-run` call MUST leave intended state unchanged and follow these outcome rules:
 
 - In all cases, never fail with `confirmation_required` (R3c).
 - If the mutating call would fail before side effects for a reason other than a permission check, fail with the mutating call's `kind`.
@@ -638,7 +640,7 @@ $ mytool services prune --env staging --json < /dev/null
 - Otherwise succeed, reporting the gate under R4c.
 - The call SHOULD apply the same permission checks as the mutating call; an omitted permission check does not require predicting its result.
 
-**R4c:** The structured success of a `--dry-run` call MUST do all of the following:
+**R4c:** **Applies when a `--dry-run` call returns structured success.** The result MUST do all of the following:
 
 - conform to the same D7 `output`;
 - list each target the mutating call would affect as observed during that call in an array field `targets`, whose item schema is tool-defined;
@@ -680,6 +682,8 @@ For example, an idempotent create-or-get may return `changed: true` and then `ch
 
 ### R6: Built-in retries MUST be safe and bounded.
 
+**Applies when:** the tool retries requests internally.
+
 A tool's internal retries MUST meet both conditions:
 
 - The retry may resolve the failure without duplicating an intended effect.
@@ -710,7 +714,7 @@ A lost response can leave both acceptance and the identifier unknown, which foll
 
 **R7c:** When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. The D7 `description` of a command that starts managed work MUST state whether it waits for completion by default.
 
-**R7d:** A command that waits for the work it started MUST fail with `kind` `operation_failed` when it observes that the work finished unsuccessfully.
+**R7d:** **Applies when the command waits for work it started.** The command MUST fail with `kind` `operation_failed` when it observes that the work finished unsuccessfully.
 Here, work means a started task whose execution outcome the command observes, such as a test run, build, deployment, or agent session.
 This rule applies whether the task finishes during the call or continues after it, and does not depend on claiming the `managed` extension.
 A failure to read a resource is not by itself a failed task.
@@ -772,7 +776,7 @@ $ mytool config validate --json
 $ mytool services list --json --output-file services.json
 ```
 
-**O2f:** Delegated stdout: on a *delegating command*, stdout is the contract of the process the command runs. On that command `--json` MUST NOT change stdout; it still forces the *non-interactive context* and selects the format F2 tests. On such a command:
+**O2f:** **Applies when the command is a *delegating command*.** Stdout is the contract of the process the command runs. On that command `--json` MUST NOT change stdout; it still forces the *non-interactive context* and selects the format F2 tests. On such a command:
 
 - stdout is not governed by the stream roles, decoration, untrusted-value handling, pipe closure, or color rules (O3a, O3b, O3d, O8, H4);
 - requirements on structured success output do not apply (R4c, R5a, R7a);
@@ -853,7 +857,7 @@ Non-normative example: in this schema, `progress` is required but nullable, whil
 
 ### O5: JSON output MUST match its declared contract.
 
-**O5a:** Document: a *document command* using the `json` format MUST follow these rules:
+**O5a:** **Applies when a *document command* uses the `json` format.** The command MUST follow these rules:
 
 - Encoding: each result is exactly one complete JSON value conforming to `output`, encoded as UTF-8 and followed by LF.
 - Success: emit a result.
@@ -950,7 +954,7 @@ The current item count is not a documented maximum.
 
 ### O7: Record streams MUST be bounded and framed.
 
-This requirement applies to a *stream command*.
+**Applies when:** the command is a *stream command*.
 
 **O7a:** Framing: `--json` MUST emit UTF-8 NDJSON with one complete JSON object per LF-terminated line and no blank lines. Each record MUST conform to D7 `output` and become readable before the command waits for another record or exits. Each record keeps its declared value types without silent truncation (O5b), its timestamp form (O5d), and its field stability across compatible versions (D8).
 
@@ -999,7 +1003,7 @@ The introspection index's `exit_codes` field (D6) carries the tool-wide meaning 
 | `1` | Generic failure. |
 | `2` | Usage error. |
 
-**F1b:** A command whose documented result is a single yes-or-no answer about existing state MAY document one additional non-zero exit code for a false answer (F1d, F1e).
+**F1b:** **Applies when the command's documented result is a single yes-or-no answer about existing state.** The command MAY document one additional non-zero exit code for a false answer (F1d, F1e).
 Examples include checking whether a unit is active or whether two files have no differences.
 For that command, exit `0` MUST mean true and the additional code MUST mean false.
 Both answers are successful outcomes, so neither requires a structured error under F2 or F3.
@@ -1186,7 +1190,7 @@ This recommendation does not cover record streams, mutation-target lists exempt 
 
 **H5a:** A command whose result is bounded under O6b MAY reject `--plain` for a page that was not selected explicitly with `--limit` or, under C1, `--cursor`, because plain output carries no `has_more`.
 
-**H5b:** `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
+**H5b:** **Applies when the command supports `--plain`.** `--plain` MUST emit one item per LF-terminated line, with no heading or terminal decoration. The line format MUST be documented and stable; if items can contain LF, its escaping MUST be documented. If `--format` exists, `--plain` MUST equal `--format plain`.
 
 Three services, one per line:
 
@@ -1285,19 +1289,21 @@ Its success result is then `{"job_id":"job_123","status":"archived","state":"suc
 
 ## Extensions
 
-The two extensions below bind a tool that names them in D6 `conformance.extensions`.
-
 For example, a tool claiming `continuation` can return its complete catalog of five built-in types without a cursor, while its listing of an unbounded number of jobs supports cursor-based pages (C1).
 A limit of 20 jobs per response is a page size, not a finite maximum for the collection.
 The conformance claim's `scope` limits the commands covered by the whole claim, including its extensions; it cannot exclude a command from just one extension (B2).
 
 ## Extension `continuation`: Bounded reads MUST be resumable.
 
+**Applies when:** the tool names `continuation` in `conformance.extensions`.
+
 This extension defines cursor-based continuation for collections (C1) and streams (C2). It builds on the bounds of collections (O6) and streams (O7); its terms, *stream command* and failing with a `kind`, are defined in the core.
 
 ### C1: Collections MUST page by opaque cursor.
 
-This requirement applies to a collection bounded under O6b; a collection with a documented finite maximum returns every item and has no page to resume.
+**Applies when:** the collection is bounded under the finite-window rule (O6b).
+
+A collection with a documented finite maximum returns every item and has no page to resume.
 
 **C1a:** Contract: the command MUST accept `--cursor`, and each JSON page MUST contain `next_cursor`, an opaque string that the caller passes unchanged to `--cursor`, or `null` exactly when `has_more` is `false`.
 
@@ -1328,6 +1334,8 @@ $ mytool jobs list --limit 2 --json
 ```
 
 ### C2: Streams MUST resume after a record.
+
+**Applies when:** the command is a *stream command*.
 
 **C2a:** `output` MUST be an object schema with `cursor` as a required string property, and each `cursor` MUST be a non-empty opaque string.
 
@@ -1385,6 +1393,8 @@ Non-normative note: cursor-based resume guarantees a continuation position, not 
 
 ## Extension `managed`: Accepted work MUST be observable.
 
+**Applies when:** the tool names `managed` in `conformance.extensions`.
+
 A caller that holds the identifier returned for accepted work (R7) can learn the work's current state and wait until it reaches a terminal state, meaning the work has finished. Where the tool offers them, the caller can also cancel or suspend the work. This extension builds on accepted work (R7) and wait deadlines (I8), and its terms, *managed operation*, *accepting call*, and *non-interactive context*, are defined in the core.
 
 ### M1: Managed work MUST expose status and wait.
@@ -1435,7 +1445,7 @@ Here `unknown` is an observed operation state, `null` records the absence of an 
 
 ### M2: Cancellation MUST be honest.
 
-**M2a:** If a managed operation can be canceled, the tool MUST provide a cancellation command, usable in a *non-interactive context*, whose name follows the naming preferences in D4b. It MUST accept the identifier returned under R7a, declare `effects: idempotent`, and fall under Stage R.
+**M2a:** **Applies when a managed operation can be canceled.** The tool MUST provide a cancellation command, usable in a *non-interactive context*, whose name follows the naming preferences in D4b. It MUST accept the identifier returned under R7a, declare `effects: idempotent`, and fall under Stage R.
 
 **M2b:** Structured success MUST contain `status` and the identifier; `changed` reports whether this call caused a new intended state transition, not whether the managed operation completed (R5a). Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation reaches another terminal state before cancellation completes, the command MUST report that observed terminal state.
 
@@ -1455,6 +1465,6 @@ $ mytool jobs wait job_123 --timeout 5m --json
 
 ### M3: Resumable suspension MUST remain distinct from cancellation.
 
-**M3a:** If managed work can be suspended and later resumed from the same point, the tool MUST expose suspension and resumption commands, usable in a *non-interactive context*, whose names follow the naming preferences in D4b. Both MUST accept the identifier returned under R7a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
+**M3a:** **Applies when managed work can be suspended and later resumed from the same point.** The tool MUST expose suspension and resumption commands, usable in a *non-interactive context*, whose names follow the naming preferences in D4b. Both MUST accept the identifier returned under R7a, declare `effects: idempotent`, and return the identifier, `status`, and `changed` in structured success.
 
 **M3b:** They MUST report only a status they observed. While suspended, `status` MUST be `paused` and non-terminal. Cancellation under M2 remains terminal and MUST NOT mean suspension. For an operation that is already terminal, both commands report the observed terminal state under the cancellation-result rule (M2b).

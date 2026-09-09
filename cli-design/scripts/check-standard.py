@@ -5,7 +5,7 @@ Checks, per file:
 
 - every fenced ``json`` block parses;
 - requirement IDs (``### D1:`` headings) are unique and in stage order;
-- clause markers (``**D1a**`` at the start of a paragraph) belong to the
+- clause markers (``**D1a:**`` at the start of a paragraph) belong to the
   enclosing requirement and run a, b, c without gaps or duplicates;
 - every reference to a requirement or clause ID resolves to one defined in
   any of the checked files, so the maintenance guide's references are
@@ -35,7 +35,7 @@ DEFAULT_FILE = Path("cli-design/references/cli-design-standard.md")
 STAGES = "DIROFHBCM"
 ID_DEFINITION = re.compile(r"^### ([A-Z][0-9]+):")
 ID_TOKEN = re.compile(r"(?<![A-Za-z0-9+])([A-Z][0-9]+)(?![A-Za-z0-9])")
-CLAUSE_MARKER = re.compile(r"^\*\*([A-Z][0-9]+)([a-z])\*\* ")
+CLAUSE_MARKER = re.compile(r"^\*\*([A-Z][0-9]+)([a-z]):\*\* ")
 CLAUSE_TOKEN = re.compile(
     rf"(?<![A-Za-z0-9+])([{STAGES}][1-9][0-9]*[a-z])(?![A-Za-z0-9])"
 )

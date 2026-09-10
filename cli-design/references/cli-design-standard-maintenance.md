@@ -33,7 +33,8 @@ Shapes the conformance claim cannot express in this version, each seen in one re
 The standard stays short. Text stays when it helps a reader apply a requirement: it states one, defines a term one uses, resolves an ambiguity in one, shows one working, says why it exists, or says where to read next. Anything else belongs elsewhere or nowhere.
 
 Write for a junior software engineer familiar with basic CLI and JSON concepts.
-Use concrete subjects and actions, and explain specialized terms before relying on them.
+Use concrete subjects and actions, and explain a specialized term or metaphor at its first use.
+Prefer common English words and direct phrasing when they keep the exact meaning; a formal synonym or abstract label stays only when it adds precision.
 Present separate steps or conditions in separate sentences or a list, keeping their scope and exceptions explicit.
 Prerequisite concepts come before definitions that depend on them.
 Design principles is non-normative and stays short; detailed rationale sits beside the requirement it explains.

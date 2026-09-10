@@ -89,7 +89,7 @@ By tool shape:
 
 ## Stage D: Discovery and introspection
 
-What a tool publishes about itself and what it does at runtime are one contract: the agreement rule (D1) holds help (D3) and the introspection output (D5 to D8) to actual behavior. Names (D4) and breadcrumbs (D9) make the next call guessable. Discovery has layers (D2); shipped guidance is the layer that adds context and does not repeat the catalogs (D10).
+What a tool publishes about itself and what it does at runtime are one contract: the agreement rule (D1) holds help (D3) and the introspection output (D5 to D8) to actual behavior. Names (D4) and breadcrumbs (suggested next commands, D9) make the next call guessable. Discovery has layers (D2); shipped guidance is the layer that adds context and does not repeat the catalogs (D10).
 
 ### D1: Published interfaces MUST match actual behavior.
 
@@ -299,11 +299,11 @@ $ hashfile schema
 
 ### D9: A workflow with one unambiguous next step SHOULD expose it as a breadcrumb.
 
-**D9a:** Continuation vectors follow these rules:
+**D9a:** The `next` field follows these rules:
 
 - In structured result output or a structured error's `error.next` field (F3), `next` MUST be a non-empty array of strings forming a complete argument list (`argv`): the executable followed by its arguments, ready to execute without a shell.
 - For the executable, `next[0]` is the tool's canonical executable name; a caller that invoked the tool by path substitutes it.
-- If the next call needs a credential or configuration source selected by a flag on the initiating call, `next` MUST include that flag with a value selecting the same source. It MAY use `-` for stdin. A path value MUST use the resolved location. The vector never contains the data read from stdin.
+- If the next call needs a credential or configuration source selected by a flag on the initiating call, `next` MUST include that flag with a value selecting the same source. It MAY use `-` for stdin. A path value MUST use the resolved location. `next` never contains the data read from stdin.
 - A command that may emit `next` in result output MUST declare it as an optional field in its D7 output schema. Emitting `error.next` alone does not require that declaration; the error field is defined by the shared error envelope (F3a).
 
 **D9b:** Human-readable output SHOULD render the same invocation as `Next: ...` and safely quote caller-controlled values.
@@ -551,7 +551,7 @@ The `--timeout` descriptor of a wait that is unbounded by default carries no `de
 This stage covers effect classification, safeguards and reporting for mutations, internal retries, and identification and outcomes of started work.
 Safeguards follow the possible damage, not merely whether a command changes state. A tool whose every command declares `effects: read_only` has no mutation requirements under R2-R5. The rules for safe, bounded retries (R6) apply when the tool retries requests internally. The rules for accepted work (R7) cover identification, completion, and deadlines.
 
-### R1: Effect metadata MUST be conservative.
+### R1: Declared effects MUST cover every valid call.
 
 **R1a:** Every D6 command entry and D7 command detail MUST declare one value from the table below.
 
@@ -559,7 +559,7 @@ Safeguards follow the possible damage, not merely whether a command changes stat
 |---|---|
 | `read_only` | The command does not change intended state. |
 | `idempotent` | The command may change intended state, but repeating a successful call with the same inputs, without an intervening change to the targeted state, MUST succeed unless an independent failure prevents execution, such as rate limiting or an unavailable dependency. A successful repeat MUST leave the intended state as the first call left it and MUST NOT repeat any other documented effect. A failure caused by the first call's effect, such as `not_found` after deletion, violates this guarantee. Recomputing or rewriting only that same intended state does not violate this guarantee. |
-| `non_idempotent` | The command meets neither preceding guarantee; a repeat may cause another intended effect or return a stable conflict. |
+| `non_idempotent` | The command meets neither the `read_only` nor the `idempotent` guarantee; a repeat may cause another intended effect or return a stable conflict. |
 
 **R1b:** The declaration MUST cover every valid call. Declare `non_idempotent` when any call lacks the repeat guarantee. Otherwise declare `idempotent` when any call can change intended state. Otherwise declare `read_only`. A changing response, incidental telemetry, logs, caches, metering, or rate limiting do not alone change the classification.
 
@@ -606,7 +606,7 @@ A failed target read still reports its own error. A preview of the empty no-op r
 
 **R3d:** `--yes` confirms a prompt; `--force` overrides a documented precondition. Accepting one MUST NOT enable the other. The name of a flag inherited from an upstream contract the tool does not own does not by itself assign either role; its documented behavior determines whether either role applies.
 
-**R3e:** Preview binding: a command for a wide mutation under R2a SHOULD accept `--expect-targets N`, where `N` is a non-negative integer.
+**R3e:** Checking the expected target count: a command for a wide mutation under R2a SHOULD accept `--expect-targets N`, where `N` is a non-negative integer.
 When the flag is given, the mutating call MUST complete these checks before its first side effect:
 
 - resolve the full target set using the same rules as the preview's `targets` array (R4c);
@@ -669,10 +669,10 @@ $ mytool services prune --env staging --yes --json
 - Every structured success document and every emitted stream record of such a command MUST contain `changed`.
 - In a stream record, `changed` describes the whole call as observed when that record is emitted, not just the event that record describes.
 - Except under the following condition, `changed` is a boolean.
-- If determining whether this call changed intended state would require an extra read solely for that purpose, the command MUST return `changed: null` and document when this happens. `null` means the tool could not determine whether it changed state.
+- If determining whether this call changed intended state would require an extra read just for that purpose, the command MUST return `changed: null` and document when this happens. `null` means the tool could not determine whether it changed state.
 
 For example, a backend may confirm that a create-if-absent request succeeded without saying whether it created the object or found it already present.
-If the command would need an extra read solely to distinguish those outcomes, it returns `changed: null`.
+If the command would need an extra read just to distinguish those outcomes, it returns `changed: null`.
 
 **R5b:** When authoritative state, including state the tool itself owns, reports a concurrent conflict, the tool MUST fail with `kind` `conflict` and MUST NOT silently overwrite it.
 
@@ -712,14 +712,14 @@ A lost response can leave both acceptance and the identifier unknown, which foll
 
 **R7b:** Exit `0` means the work was accepted, not completed. The identifier MUST remain usable after the initiating process exits and, until expiry under a documented retention policy, MUST NOT resolve to a different entity. A tool MAY reassign it after expiry. The tool SHOULD document how a caller observes the work, and when a wait command exists, the identifier's D9 breadcrumb SHOULD name it.
 
-**R7c:** When a command offers both waiting for completion and returning after acceptance, selecting the latter MUST change only how long the command waits, not the work it starts. The D7 `description` of a command that starts managed work MUST state whether it waits for completion by default.
+**R7c:** When a command offers both waiting for completion and returning after acceptance, choosing to return after acceptance MUST change only how long the command waits, not the work it starts. The D7 `description` of a command that starts managed work MUST state whether it waits for completion by default.
 
 **R7d:** **Applies when the command waits for work it started.** The command MUST fail with `kind` `operation_failed` when it observes that the work finished unsuccessfully.
 Here, work means a started task whose execution outcome the command observes, such as a test run, build, deployment, or agent session.
 This rule applies whether the task finishes during the call or continues after it, and does not depend on claiming the `managed` extension.
 A failure to read a resource is not by itself a failed task.
 The error's `context` MUST include the task's identifier if one was obtained, and its observed status if the task's interface exposes one.
-A task that finishes during the call does not need an artificial identifier solely to report its failure.
+A task that finishes during the call does not need an artificial identifier just to report its failure.
 If its deadline passes after the work was accepted, it MUST fail as follows:
 
 - If the work's state was observed, use `kind` `timeout`. Include the identifier under R7a and the observed state in `context`.
@@ -783,7 +783,7 @@ $ mytool services list --json --output-file services.json
 - stderr still carries failure diagnostics (F2);
 - the exit status keeps its tool-wide meaning (F1), so a child exit status passed through unchanged violates F1 where it collides with a tool-wide meaning.
 
-A D7 excerpt for a command that runs a caller-supplied program and passes its stdout through:
+Part of the command detail (D7) for a command that runs a caller-supplied program and passes its stdout through:
 
 ```json
 {
@@ -867,7 +867,7 @@ Non-normative example: in this schema, `progress` is required but nullable, whil
 Completeness concerns the result promised for that call. A full report about a failed job or failed batch targets is complete data. More pages existing does not make the requested page incomplete.
 The structured error still goes to stderr under the error rules (F2).
 
-A generator's command-detail excerpt:
+Part of a generator's command detail:
 
 ```json
 {
@@ -970,7 +970,7 @@ The current item count is not a documented maximum.
 
 **O7c:** Ordering: the stream MUST use a stable, documented order and MUST NOT stop before a finite window that ends the read while matching records are available.
 
-**O7d:** Completion: exit `0` means the requested read ended successfully, not that the record source is exhausted; an empty stream is valid except when mutation reporting requires at least one record (R5a). After a non-zero exit, prior LF-terminated records remain valid. An unterminated final fragment is not a record. This standard defines no end record; EOF and the exit status are authoritative.
+**O7d:** Completion: exit `0` means the requested read ended successfully, not that the record source has no more records; an empty stream is valid except when mutation reporting requires at least one record (R5a). After a non-zero exit, prior LF-terminated records remain valid. An unterminated final fragment is not a record. This standard defines no end record; EOF and the exit status are authoritative.
 
 Resuming a stream after a record falls under the `continuation` extension (C2).
 
@@ -993,7 +993,7 @@ A failure has two faces: what the process reports through its exit status (F1), 
 ### F1: Exit codes MUST be stable and documented.
 
 **F1a:** The codes in the table below MUST have these meanings.
-The list is not exhaustive: tools can define additional codes with stable meanings.
+Tools can also define additional codes with stable meanings.
 Detailed failure reasons belong in the structured error's `kind`, rather than a separate exit code for each reason (F1d).
 The introspection index's `exit_codes` field (D6) carries the tool-wide meaning of every code the tool returns. A code whose meaning belongs to one command alone is added to that command's `exit_codes` field in command detail (D7), under the command-specific-code rule (F1e).
 
@@ -1051,13 +1051,13 @@ The final row places the object on the last non-empty line of `error.log`. `NO_I
 
 ### F3: Structured errors MUST have a stable envelope.
 
-**F3a:** The document MUST contain exactly one top-level field, `error`, whose value is an object with the fields in the table below. Its `kind` is the only stable match target; message text is not a stable interface.
+**F3a:** The document MUST contain exactly one top-level field, `error`, whose value is an object with the fields in the table below. Only `kind` is a stable value for a caller to match on; message text is not a stable interface.
 
 | Field | JSON type | Presence | Value and meaning |
 |---|---|---|---|
 | `kind` | string | MUST, always | Stable machine meaning; the values in the `kind` table below have shared meanings. |
 | `message` | string | MUST, always | Identifies the failed operation and cause. |
-| `retryable` | boolean | MAY | `true` only when the same call may resolve the failure without duplicating an intended effect; if omitted, the caller has no assurance that repeating the call is safe (F3b). |
+| `retryable` | boolean | MAY | `true` only when the same call may resolve the failure without duplicating an intended effect; if omitted, the caller has no guarantee that repeating the call is safe (F3b). |
 | `action` | string | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
 | `hint` | string | SHOULD, when one concrete recovery step is known | Human-readable guidance on what to do or correct (F3b); it can describe a step outside the CLI. |
 | `next` | array | MAY | One recovery command: the executable followed by its arguments, each a string, ready to execute without a shell (D9). Absent when no natural recovery step exists. Does not require a field in the result schema unless result output also uses `next`. |
@@ -1065,7 +1065,7 @@ The final row places the object on the last non-empty line of `error.log`. `NO_I
 
 **F3b:** Recovery fields follow these rules:
 
-- `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no assurance that a retry is safe.
+- `retryable` is `true` only when the same call may resolve the failure without duplicating an intended effect; when it is omitted, the caller has no guarantee that a retry is safe.
 - `hint` is present when one concrete recovery step is known; omit it rather than guess.
 - When `retryable` is `true`, `context` SHOULD carry `retry_after_ms`: a non-negative integer giving the minimum wait, in milliseconds, before repeating the call.
 - When `retryable` is `true` and the tool knows a finite retry limit that applies to this call, `context` SHOULD carry `attempts_remaining`: a non-negative integer giving the number of further attempts allowed by that limit.
@@ -1179,7 +1179,7 @@ A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documente
 - omit all terminal escape sequences when the `TERM` environment variable is set to `dumb` or the stream is not a TTY;
 - omit color when `NO_COLOR` is non-empty; other styling MAY remain.
 
-`TERM` identifies the terminal type; `dumb` denotes a basic terminal without advanced display capabilities.
+`TERM` identifies the terminal type; `dumb` means a basic terminal without advanced display capabilities.
 A flag or documented setting overrides these defaults only on human-readable output. Color MUST NOT be the only carrier of information.
 
 **H4b:** If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`. `--color always` has no effect on `--plain` output or on format selection.
@@ -1235,7 +1235,7 @@ For example, a command that requires `--json compact` instead of accepting bare 
 
 The index still lists every command the tool dispatches, and each listed command still provides introspection detail (D5d). For excluded commands, that detail still matches the runtime parser (D5b), but need not satisfy the command-detail contract (D7).
 
-For example, this index excerpt selects the `services` group:
+For example, this part of the index selects the `services` group:
 
 ```json
 {
@@ -1291,9 +1291,9 @@ All five commands remain discoverable, and the tool-wide requirements still appl
 - The command MUST use the replacement name wherever the standard uses that field name: in the output schema, result output, the error's `next` or `context`, or a collection item. The replacement field keeps the standard's required type and meaning.
 - For `next`, the replacement name is also allowed in the error envelope; the existing `next` field keeps its released meaning.
 - A command that does not provide the standard's meaning under any name is incompatible and is excluded from the conformance declaration (B2a).
-- A caller SHOULD consult `reserved_overrides` before reading a reserved field name from that command's output.
+- A caller SHOULD check `reserved_overrides` before reading a reserved field name from that command's output.
 
-For example, a released `jobs status` command uses `status` to say whether a job is archived. The standard uses that name for the job's execution outcome. The tool keeps its existing `status` and supplies the standard's meaning in `state`. This command-detail excerpt tells callers to read `state` wherever the standard requires `status`:
+For example, a released `jobs status` command uses `status` to say whether a job is archived. The standard uses that name for the job's execution outcome. The tool keeps its existing `status` and supplies the standard's meaning in `state`. This part of the command detail tells callers to read `state` wherever the standard requires `status`:
 
 ```json
 {
@@ -1333,7 +1333,7 @@ A collection with a documented finite maximum returns every item and has no page
 **C1c:** Failure: if the cursor is invalid, expired, incompatible, or cannot continue the same result set, the command MUST fail with `kind` `cursor_unavailable`.
 A cursor identifies a position in the documented order.
 If that position can no longer be located in that order, continuation is unavailable.
-A position immediately after the last item MAY yield an empty final page.
+For a position immediately after the last item, the command MAY return an empty final page.
 
 **C1d:** Order: pagination MUST use a stable, documented order and document whether it reads live state or one fixed snapshot. That choice determines whether continuation is exact across concurrent insertions and deletions.
 
@@ -1364,7 +1364,7 @@ $ mytool jobs list --limit 2 --json
 
 **C2c:** If this continuation cannot be guaranteed because the cursor or required history is invalid, expired, or incompatible, the command MUST fail with `kind` `cursor_unavailable`.
 
-A command schema excerpt with the required `cursor` property:
+Part of a command schema showing the required `cursor` property:
 
 ```json
 {
@@ -1410,7 +1410,7 @@ Non-normative example: assume another `logs` stream command declares `continuati
 
 The successful reads end without ending the record source. The cursor selects the continuation position; `--limit` supplies the record budget. The rejected call's row specifies the error, not whether stdout contains earlier records.
 
-Non-normative note: cursor-based resume guarantees a continuation position, not exactly-once delivery. Persisting a cursor only after processing its record minimizes replay; a crash before that checkpoint may cause the record to be received again.
+Non-normative note: cursor-based resume guarantees a continuation position, not exactly-once delivery. Persisting a cursor only after processing its record reduces repeated delivery of already processed records; a crash before that checkpoint may cause the record to be received again.
 
 ## Extension `managed`: Accepted work MUST be observable.
 

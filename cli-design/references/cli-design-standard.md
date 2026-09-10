@@ -161,7 +161,7 @@ For a tool with one unnamed command (D6a `command`), any argument after the intr
 | `commands` | array | MUST, always | Flat routing list of every command the tool itself dispatches, by full path, sorted by `name` in Unicode code point order; excludes the introspection command. Group prefixes that dispatch nothing themselves are not entries. Commands provided by external executables MAY be omitted only when the tool itself dispatches at least one command and the omitted executables are optional additions installed by the caller; the tool MUST document that they are omitted. |
 | `command` | object | MUST, exactly when the tool has one unnamed command | Detail of the unnamed command. D7 binds it when the claim covers the command; outside the claim it matches the parser under D5b instead (B2c). |
 
-**D6b:** Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `name` MUST consist of non-empty segments separated by exactly one U+0020, or be `""` for the unnamed command, and MUST be unique within `commands`. `description` MUST distinguish neighboring commands, and `effects` is the R1a value. An entry MAY contain `conforming: false` under B2a; omitted, it means `true`.
+**D6b:** Each command entry MUST contain `name`, `description`, and `effects`, and MUST NOT contain invocation details. `name` MUST consist of non-empty segments separated by exactly one space (U+0020), or be `""` for the unnamed command, and MUST be unique within `commands`. `description` MUST distinguish neighboring commands, and `effects` is the R1a value. An entry MAY contain `conforming: false` under B2a; omitted, it means `true`.
 
 **D6c:** In the `conformance` object, the fields `name` and `standard` MUST equal `cli-design-standard` and the version of this document the tool was checked against, respectively. `extensions` MUST be present and list each claimed extension exactly once.
 It is an empty array when none is claimed.
@@ -1059,8 +1059,8 @@ The final row places the object on the last non-empty line of `error.log`. `NO_I
 | `message` | string | MUST, always | Identifies the failed operation and cause. |
 | `retryable` | boolean | MAY | `true` only when the same call may resolve the failure without duplicating an intended effect; if omitted, the caller has no assurance that repeating the call is safe (F3b). |
 | `action` | string | MAY | `agent` when the caller can recover autonomously, `user` when human action is required, or `none` when no recovery action exists. |
-| `hint` | string | SHOULD, when one concrete recovery step is known | Recovery step (F3b). |
-| `next` | array | MAY | A recovery command as an argument vector under D9; absent when no natural recovery step exists. Does not require a field in the result schema unless result output also uses `next`. |
+| `hint` | string | SHOULD, when one concrete recovery step is known | Human-readable guidance on what to do or correct (F3b); it can describe a step outside the CLI. |
+| `next` | array | MAY | One recovery command: the executable followed by its arguments, each a string, ready to execute without a shell (D9). Absent when no natural recovery step exists. Does not require a field in the result schema unless result output also uses `next`. |
 | `context` | object | MAY; required for accepted-work or wait-command failures as specified in R7a, R7d, and M1b | Machine-readable values needed for recovery. The recovery-field and partial-result rules (F3b, F4b) recommend fields in it. |
 
 **F3b:** Recovery fields follow these rules:
@@ -1088,7 +1088,7 @@ The final row places the object on the last non-empty line of `error.log`. `NO_I
 | `operation_failed` | A started task reached an observed unsuccessful outcome under the started-work or managed-wait rules (R7d, M1e). `context` carries its identifier if one was obtained, and its observed status if the task's interface exposes one. | R7, M1 |
 | `precondition_failed` | A documented precondition that `--force` overrides is not met. | |
 
-A complete error object with every field:
+An error with recovery guidance: `hint` explains what to look for, and `next` provides the command to list the available images.
 
 ```json
 {
@@ -1097,7 +1097,7 @@ A complete error object with every field:
     "message": "Cannot deploy 'web-api': image 'web:v2.1.0' was not found",
     "retryable": false,
     "action": "agent",
-    "hint": "Run mytool images list web",
+    "hint": "Choose an existing image tag before retrying the deployment.",
     "next": ["mytool", "images", "list", "web"],
     "context": {"service": "web-api", "image": "web:v2.1.0"}
   }
@@ -1108,7 +1108,9 @@ A complete error object with every field:
 
 **F4a:** If a failed command may have caused an intended effect and did not observe the outcome, it MUST use F3 `kind` `outcome_unknown` and MUST NOT report completion or absence. Any result document follows the failure-output and partial-data rules (O5a); prior LF-terminated stream records remain valid (O7d).
 
-**F4b:** If usable partial results or completed effects survive a failure, the structured error SHOULD identify them in `context`; completed effects go under `completed`, an array of the affected targets as the caller named them.
+**F4b:** If usable partial results or completed effects survive a failure, the structured error SHOULD identify them in `context`.
+Completed effects go in `error.context.completed`, an array of the affected targets as the caller named them.
+This array identifies effects already performed; the result's `partial` field describes incomplete data (O5a), not whether every intended effect was performed.
 
 **F4c:** After a failure, a command MUST NOT silently replace the requested target, source, or mode. It MUST fail with a `kind` or identify the substitution in its declared structured result.
 
@@ -1164,7 +1166,7 @@ A person at the terminal should find familiar flag names, standard environment b
 
 Tools with nested commands SHOULD provide shell completions.
 
-Static command, flag, and alias candidates match actual behavior under D1.
+The fixed list of command names, flags, and aliases suggested by shell completions matches what the installed tool supports, as required by the published-interface agreement rule (D1).
 
 ### H3: External editors and pagers MUST respect user selection.
 
@@ -1174,9 +1176,10 @@ A tool that starts an editor MUST prefer `VISUAL` to `EDITOR` unless a documente
 
 **H4a:** This clause does not govern a *delegating command*'s stdout; it still governs the tool's own stderr decoration. A tool that emits terminal escape sequences MUST apply these defaults to each stream based on that stream's TTY state:
 
-- omit all terminal escape sequences when `TERM` is `dumb` or the stream is not a TTY;
+- omit all terminal escape sequences when the `TERM` environment variable is set to `dumb` or the stream is not a TTY;
 - omit color when `NO_COLOR` is non-empty; other styling MAY remain.
 
+`TERM` identifies the terminal type; `dumb` denotes a basic terminal without advanced display capabilities.
 A flag or documented setting overrides these defaults only on human-readable output. Color MUST NOT be the only carrier of information.
 
 **H4b:** If provided, the color flag MUST be `--color` with the values `auto`, `always`, and `never`: `auto` applies that default, and the other two override it. `--no-color` MAY be provided as `--color=never`. `--color always` has no effect on `--plain` output or on format selection.
@@ -1203,32 +1206,36 @@ scheduler
 
 ## Existing tools
 
-This section is the brownfield path. A tool with a released contract can adopt this standard without breaking its callers. Requirements outside this section remain applicable except where this section states what released behavior may be kept. This section defines those exceptions and how the tool declares them, so that a caller reading the D6 index knows what the claim covers. It builds on the conformance claim (D6) and command detail (D7), and its terms, *introspection command* and *reserved field name*, are defined in the core.
+This section helps tools adopt the standard while preserving released behavior that callers depend on. The conformance claim is the tool's declaration of compliance, stored in the index's `conformance` object (D6). B1 explains which behavior qualifies, B2 defines which commands the declaration covers, and B3 and B4 list the permitted exceptions. Requirements outside these exceptions still apply. Individual command contracts appear in command detail (D7).
 
 ### B1: Released behavior MAY be kept where changing it would break callers.
 
-**B1a:** A command path, flag, environment variable, or F3 `kind` is brownfield when it preserves a released contract and greenfield otherwise; these words describe the subject, not the tool. A path added after a tool-wide contract was released inherits that contract and is brownfield with respect to it, and greenfield with respect to everything the path itself introduces. A clause in this section applies with respect to the subject it names.
+**B1a:** A command path, flag, environment variable, or error `kind` is brownfield if it keeps a previously released contract; otherwise it is greenfield. These labels describe individual parts of the interface, not the whole tool. A new command inherits any previously released tool-wide contract: its inherited behavior is brownfield, and anything it introduces is greenfield. Each rule below applies to the part of the interface it names.
 
-**B1b:** A brownfield path MAY preserve established behavior when changing it would break existing callers. Retaining behavior allowed by the compatibility exceptions (B3, B4) does not affect the claim. Any other retained behavior that violates a requirement makes the command incompatible, and the claim-exclusion rule (B2) places it outside the claim. A tool that retains an incompatible command SHOULD also provide a documented conforming path for the same operation.
+**B1b:** A brownfield command path MAY keep established behavior when changing it would break existing callers. Behavior kept under the permitted exceptions (B3, B4) does not make a command incompatible. Any other retained behavior that violates a requirement excludes the command from the conformance declaration (B2). A tool that keeps an incompatible command SHOULD also provide a documented conforming command path for the same operation.
 
-Non-normative example: a tool has a released, tool-wide `--output PATH` contract. A new `reports export` command inherits that contract, so it can retain that destination flag under B3's O2e row. The same command introduces an archive-mode option with no released name; it uses `--archive-mode` under the canonical flag-name rule (H1a). The new command is brownfield with respect to the inherited destination flag and greenfield with respect to its new option.
+For example, a tool's released interface uses `--output PATH` across its commands. A new `reports export` command inherits that destination flag and can keep it under the released-name exception (B3, O2e row). If it also introduces an archive-mode option, that new flag follows the canonical naming rule (H1a), for example `--archive-mode`. The inherited flag is brownfield; the new option is greenfield.
 
-### B2: The claim MUST exclude incompatible retained commands.
+### B2: The conformance declaration MUST exclude incompatible retained commands.
 
-**B2a:** A retained incompatible command MUST carry `conforming: false` in its D6 entry, and its retained behavior MUST be documented. Omitted, `conforming` means `true`; a marked entry still carries the required entry fields under D6b. A retained `--json` that requires a value is such a command; it conforms once bare `--json` selects the D7 `output` document.
+`scope` selects commands by path prefix; `conforming: false` excludes individual commands.
 
-**B2b:** `scope` in D6 `conformance` MAY be present as a non-empty array of non-empty command-path prefixes. When present, the claim covers only a command whose `name` equals one of them or begins with one of them followed by U+0020, and a caller MUST NOT infer anything about commands outside it. A command outside `scope` need not carry `conforming: false`.
+**B2a:** A command that retains incompatible behavior MUST carry `conforming: false` in its index entry, unless it is outside `scope` (B2b). That behavior MUST be documented. Omitting `conforming` means `true`; the entry still includes the required name, description, and effects (D6b).
+For example, a command that requires `--json compact` instead of accepting bare `--json` is incompatible with the required machine-output flag (O2b).
 
-**B2c:** The claim covers every command not marked under B2a and, when `scope` is present, only the commands within it. `scope` limits only requirements that apply per command. These tool-wide requirements bind regardless of it:
+**B2b:** The `conformance` object MAY contain `scope`, a non-empty array of non-empty command-path prefixes. A command is within `scope` when its `name` equals a listed prefix or starts with that prefix followed by a space (U+0020). A caller MUST NOT infer conformance for commands outside `scope` from this declaration.
+
+**B2c:** The tool declares conformance for every command except those marked `conforming: false` and, when `scope` is present, those outside it. With no `scope` and no commands marked `conforming: false`, all commands are covered.
+`scope` limits only requirements that apply per command. These tool-wide requirements still apply:
 
 - root help (D3a);
 - flag-name consistency and the version flag (D4c, D4d);
 - the introspection command, its index, and their stability (D5, D6, D8);
 - the exit-code table and the declared default formats (F1a, O2a).
 
-`commands` still lists every command the tool dispatches, and each listed command still returns detail under D5d; for a command outside the claim, whether outside `scope` or marked `conforming: false`, that detail still matches the parser under D5b and is not bound by the D7 contract.
+The index still lists every command the tool dispatches, and each listed command still provides introspection detail (D5d). For excluded commands, that detail still matches the runtime parser (D5b), but need not satisfy the command-detail contract (D7).
 
-Non-normative example: this fragment of an introspection index limits the claim to the `services` command-path prefix:
+For example, this index excerpt selects the `services` group:
 
 ```json
 {
@@ -1241,15 +1248,25 @@ Non-normative example: this fragment of an introspection index limits the claim 
 }
 ```
 
-The claim covers `services get` and `services list` unless their entries carry `conforming: false`. It does not cover `jobs list` or `services-admin get`: a prefix matches at a segment boundary. All four commands remain in the index, and the tool-wide requirements still apply.
+Assume the tool lists these commands in its index:
+
+| Command name | `conforming` in its entry | Covered by the declaration? |
+|---|---|---|
+| `services get` | Omitted | Yes. |
+| `services list` | Omitted | Yes. |
+| `services legacy` | `false` | No: explicitly excluded. |
+| `jobs list` | Omitted | No: outside `scope`. |
+| `services-admin get` | Omitted | No: `services-admin` is not `services`. |
+
+All five commands remain discoverable, and the tool-wide requirements still apply.
 
 ### B3: Released names, defaults, and flag positions MAY be kept.
 
-**B3a:** A command path, flag, environment variable, or tool MAY keep the released behavior described for it in the table below in place of the requirement named, under the stated condition. Everything else in the named requirement still applies. Aliases MAY remain for compatibility.
+**B3a:** A command path, flag, environment variable, or tool MAY keep the released behavior listed below if it meets the condition in that row. Only the listed behavior is an exception; the rest of the named requirement still applies. Aliases MAY remain for compatibility.
 
-| Requirement | What the subject MAY keep | Condition |
+| Requirement | Released behavior that MAY be kept | Condition |
 |---|---|---|
-| D4b | Released names in place of `get`, `list`, `create`, and `delete`, such as `info`, `ls`, or `add`. | None. |
+| D4b | Released names in place of `get`, `list`, `create`, and `delete`, such as `info`, `ls`, or `add`. | No additional condition. |
 | D4d | The released form of `tool_version` and of `--version` output. | `--version` output still contains `tool_version` under D6a. |
 | D5a | `schema` as the first argument of a released command. | The tool MUST provide introspection in another form, such as a prefix (`tool contract schema`) or a flag (`tool --schema`). |
 | I2a | Released environment variable names outside the `<TOOL>_<OPTION>` prefix. | They are still documented under I2a. |
@@ -1257,26 +1274,26 @@ The claim covers `services get` and `services list` unless their entries carry `
 | I4a | Released names for the flags that select a secret source. | The source is still usable in a *non-interactive context* under I4a. |
 | I6b | Released flag positions relative to positional arguments. | `--` still ends flag parsing. |
 | O2c | A released default format. | A retained non-TTY default MUST be declared in `format_defaults`. |
-| O2e | A released `--output` flag, and a released name for a destination path. | None. |
+| O2e | A released `--output` flag, and a released name for a destination path. | No additional condition. |
 | H1a | A released flag name that is not kebab-case, or more than one long name for a concept. | Every accepted alias still behaves like its canonical flag under H1b. |
 | R3d | One flag that both confirms a prompt and overrides a precondition, as an exception to D4c. | The tool MUST document, for each command, whether the flag confirms a prompt, overrides a precondition, or does both. A command added later on that tool MAY use the retained flag under the same rule. |
 
 ### B4: A released meaning MAY be kept while this standard's meaning stays reachable.
 
-**B4a:** When a released contract assigns another meaning to `1` or `2`, the tool MAY keep it. It MUST then document the code it uses for each F1a meaning, and D6 `exit_codes` carries those substitutes under F1a.
+**B4a:** If a released contract gives exit code `1` or `2` a different meaning, the tool MAY keep that meaning. It MUST document which exit code it uses for each meaning in the standard exit-code table (F1a). The index's `exit_codes` includes those substitute codes (D6).
 
-**B4b:** A released `kind` whose meaning conflicts with the shared error-kind table (F3c) MAY be retained. The tool MUST document that the retained `kind` does not use the meaning defined in that table.
+**B4b:** A tool MAY keep a released error `kind` that has a different meaning from the shared error-kind table (F3c). It MUST document that difference.
 
-**B4c:** Reserved names follow these rules:
+**B4c:** Reserved field names and their replacements follow these rules:
 
-- A command that already uses a reserved field name with an incompatible type or meaning in its result output, `error.next`, or `error.context` MAY retain it when it returns this standard's meaning under another name.
-- When a command retains such a field, it MUST then declare the collision in D7 `reserved_overrides`, an object mapping each such reserved field name to the name that carries this standard's meaning.
-- A mapping replaces the reserved name wherever a requirement uses it: in the D7 schema, result output, F3 `next` or `context`, or a collection item. The command MUST use the mapped name at every such location. The mapped field keeps the required type and meaning.
-- A mapped `next` field is permitted in the error envelope in place of F3 `next`; the released field keeps its original meaning.
-- A command that provides no name for that meaning is incompatible and falls under the exclusion in B2a.
+- A command MAY keep a reserved field name already used with an incompatible type or meaning in its result output, `error.next`, or `error.context` if it also returns this standard's meaning under another name.
+- The command MUST declare that mapping in `reserved_overrides` in its command detail (D7). Each key is a *reserved field name*; its value is the replacement name that carries the standard's meaning.
+- The command MUST use the replacement name wherever the standard uses that field name: in the output schema, result output, the error's `next` or `context`, or a collection item. The replacement field keeps the standard's required type and meaning.
+- For `next`, the replacement name is also allowed in the error envelope; the existing `next` field keeps its released meaning.
+- A command that does not provide the standard's meaning under any name is incompatible and is excluded from the conformance declaration (B2a).
 - A caller SHOULD consult `reserved_overrides` before reading a reserved field name from that command's output.
 
-A command whose released output uses `status: "archived"` for a lifecycle state can retain it and return this standard's operation outcome as `state: "succeeded"`. Its D7 detail declares the mapping; this excerpt shows the relevant fields:
+For example, a released `jobs status` command uses `status` to say whether a job is archived. The standard uses that name for the job's execution outcome. The tool keeps its existing `status` and supplies the standard's meaning in `state`. This command-detail excerpt tells callers to read `state` wherever the standard requires `status`:
 
 ```json
 {
@@ -1285,7 +1302,11 @@ A command whose released output uses `status: "archived"` for a lifecycle state 
 }
 ```
 
-Its success result is then `{"job_id":"job_123","status":"archived","state":"succeeded"}`: the caller reads the operation outcome from `state`, and the released `status` field keeps its original meaning.
+The result shows both: the job is archived, and its execution succeeded.
+
+```json
+{"job_id":"job_123","status":"archived","state":"succeeded"}
+```
 
 ## Extensions
 
@@ -1425,7 +1446,7 @@ The timestamp field names are tool-defined; their format follows O5d.
 - When the wait command's I8b `--timeout` deadline expires, it fails with `kind` `timeout`.
 - When the operation is already terminal, the wait command MUST return immediately.
 - Timing out or terminating the wait command MUST NOT cancel or otherwise change the operation, and MUST NOT be reported as a terminal operation outcome.
-- If a wait failure names an existing operation and a status or log command can help recovery, the error SHOULD include that concrete command as its `hint` (F3b). Other failures follow the general hint rule in F3b.
+- If a wait failure names an existing operation and a status or log command can help recovery, the error SHOULD include that concrete command in its human-readable `hint` (F3b). The same command can be provided as executable arguments in `next` under the recovery-command rules (D9). Other failures follow the general hint rule in F3b.
 
 **M1f:** Listing: the tool SHOULD provide a command, usable in a *non-interactive context*, that lists managed operations with the identifier and `status`; its result is a bounded collection under O6.
 

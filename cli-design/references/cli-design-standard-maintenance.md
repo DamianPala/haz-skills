@@ -44,6 +44,10 @@ Accommodations for released contracts live under Existing tools. A requirement e
 A cross-reference names in words what the referenced rule requires, as far as the referring sentence needs it, and the identifier follows the words, so the sentence still says what applies with the identifier removed. The words carry no normative keyword and add no condition; the identifier stays the address of the rule. When a table defines whether a field is present, another rule refers to that condition instead of imposing it again and states only the behavior it adds.
 In source Markdown, link named sections; keep requirement and clause identifiers as plain text.
 
+All examples are non-normative: they explain requirements and add no obligations or exceptions.
+They remain consistent with the requirements they illustrate.
+A standalone example starts with a bold `Example: short description.` label.
+One label covers its connected code blocks, tables, and explanations; a short example within prose uses `For example, ...`.
 An example sits beside the clause it explains and shows the concrete input and outcome needed to resolve the reading problem.
 An example covering several requirements or clauses may sit immediately after the last one it covers.
 Any assumed behavior is stated explicitly.

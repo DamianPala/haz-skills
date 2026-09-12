@@ -1,10 +1,13 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.1.0-draft.8
+**Version:** 0.1.0
 
 ## Scope
 
 This document defines the contract for command-line tools, new or adapted, for reliable use by people and software agents. It includes human-facing behavior, machine-readable introspection, and the minimum safety contract for repeated and mutating operations. The requirements are written for greenfield: a tool or path with no released contract. Brownfield adoption, keeping released behavior that callers depend on, is the subject of [Existing tools](#existing-tools).
+
+Tools may define their own commands and domain-specific behavior.
+This standard defines shared interface requirements, not a complete list of tool functions; every command covered by a conformance claim must satisfy the requirements that apply to its behavior.
 
 The standard is independent of the operating system, shell, implementation language, framework, and backend. Arguments, standard streams, environment variables, exit codes, and TTY refer to the equivalent process interfaces on each platform. Examples are non-normative: they explain requirements and add no obligations or exceptions.
 Command examples use POSIX-like notation for readability.
@@ -48,7 +51,7 @@ Italics mark a term defined in this section.
 
 A conforming tool MUST satisfy every applicable core requirement in this standard. A conditional requirement applies only when its stated condition is true.
 
-A full conformance claim is the D6 `conformance` field. It MUST identify the version of this document the tool was checked against and every extension the tool claims. A claim of any `0.1.x` version is valid under every later `0.1.x`, because a `0.1.x` release adds no core requirement, strengthens none, and changes no meaning of a name, field, flag, or `kind` a caller may rely on; a change that would do any of these is `0.2.0`. This version defines two extensions under [Extensions](#extensions), [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) and [`managed`](#extension-managed-accepted-work-must-be-observable). A tool MAY claim an extension only if every applicable requirement in its section is satisfied on every command the claim covers.
+A full conformance claim is the D6 `conformance` field. It MUST identify the version of this document the tool was checked against and every extension the tool claims. A claim of any released `0.1.x` version is valid under every later `0.1.x`, because a `0.1.x` release adds no core requirement, strengthens none, and changes no meaning of a name, field, flag, or `kind` a caller may rely on; a change that would do any of these is `0.2.0`. Draft versions are not covered by this compatibility promise. This version defines two extensions under [Extensions](#extensions), [`continuation`](#extension-continuation-bounded-reads-must-be-resumable) and [`managed`](#extension-managed-accepted-work-must-be-observable). A tool MAY claim an extension only if every applicable requirement in its section is satisfied on every command the claim covers.
 
 A tool with a released contract adopts this standard under [Existing tools](#existing-tools), which defines what such a tool may keep and how the claim excludes incompatible retained commands. Every requirement outside that section remains applicable except where that section states what released behavior may be kept.
 
@@ -200,7 +203,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.8", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.1.0", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -270,7 +273,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.1.0-draft.8", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.1.0", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -1242,7 +1245,7 @@ The index still lists every command the tool dispatches, and each listed command
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.1.0-draft.8",
+    "standard": "0.1.0",
     "extensions": [],
     "scope": ["services"]
   }
@@ -1432,6 +1435,12 @@ This extension lets a caller check the state of a *managed operation* and wait f
 A terminal state means the work has finished.
 Where the tool supports cancellation or suspension, the caller can also request those actions.
 The wait command follows the timeout rules (I8).
+
+The roles below do not cover every operation a tool can offer for managed work.
+Additional commands follow the requirements that apply to their behavior.
+
+**Example: changing a job's priority.** A tool can offer a command that changes the priority of a running job without a separate extension for that command.
+The command still follows all applicable requirements, including those for inputs, mutations, and output.
 
 ### M1: Managed work MUST expose status and wait.
 

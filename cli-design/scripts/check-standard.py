@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Check document invariants of the CLI Design Standard.
 
 Checks, per file:
@@ -29,10 +28,11 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 
 DEFAULT_FILE = Path("cli-design/references/cli-design-standard.md")
-STAGES = "DIROFHBCM"
+STAGES = "DIROFHBCMV"
 ID_DEFINITION = re.compile(r"^### ([A-Z][0-9]+):")
 ID_TOKEN = re.compile(r"(?<![A-Za-z0-9+])([A-Z][0-9]+)(?![A-Za-z0-9])")
 CLAUSE_MARKER = re.compile(r"^\*\*([A-Z][0-9]+)([a-z]):\*\* ")
@@ -41,7 +41,7 @@ CLAUSE_TOKEN = re.compile(
 )
 VERSION_LINE = re.compile(r"^\*\*Version:\*\* (\S+)$")
 STANDARD_VALUE = re.compile(r'"standard": "([^"]*)"')
-FENCE = re.compile(r"^```(\w*)\s*$")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(\w*)\s*$")
 KEYWORDS = ("MUST", "SHOULD", "MAY")
 
 Segment = tuple[int, str, str]
@@ -62,16 +62,30 @@ def split_fences(lines: list[str]) -> list[Segment]:
     kind = "prose"
     start = 1
     buffer: list[str] = []
+    fence_length = 0
+    fence_character = ""
     for number, line in enumerate(lines, start=1):
         match = FENCE.match(line)
         if match is None:
             buffer.append(line)
             continue
+        ticks, language = match.groups()
+        if kind != "prose" and (
+            language or len(ticks) < fence_length or ticks[0] != fence_character
+        ):
+            buffer.append(line)
+            continue
         segments.append((start, kind, "\n".join(buffer)))
         buffer = []
-        kind = (match.group(1) or "code") if kind == "prose" else "prose"
+        if kind == "prose":
+            kind, fence_length = language or "code", len(ticks)
+            fence_character = ticks[0]
+        else:
+            kind, fence_length = "prose", 0
         start = number + 1
     segments.append((start, kind, "\n".join(buffer)))
+    if kind != "prose":
+        segments.append((start - 1, "unclosed_fence", ""))
     return segments
 
 
@@ -92,6 +106,9 @@ def load(path: Path) -> Document:
 def check_json_blocks(doc: Document) -> list[str]:
     problems = []
     for start, kind, text in doc.segments:
+        if kind == "unclosed_fence":
+            problems.append(f"{doc.path}:{start}: unclosed code fence")
+            continue
         if kind != "json":
             continue
         try:
@@ -119,7 +136,7 @@ def collect_ids(doc: Document) -> list[str]:
             else:
                 doc.defined[identifier] = number
     order = list(doc.defined)
-    for previous, current in zip(order, order[1:]):
+    for previous, current in pairwise(order):
         if stage_key(current) <= stage_key(previous):
             problems.append(
                 f"{doc.path}:{doc.defined[current]}: requirement {current}"

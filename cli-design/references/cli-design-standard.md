@@ -2200,10 +2200,19 @@ A question in a completed answer uses a normal follow-up instead.
 
 ### V6: Answers MUST remain readable as documents.
 
-**V6a:** The conversation-start, follow-up, correction, and wait roles MUST provide *document commands* for non-interactive use.
-On non-TTY stdout, they MUST default to the `text` presentation below. This applies whether the call returns an answer or only a receipt.
-Status, queue receipts, and queue reads follow the general format-selection rule (O2c).
-Queue restart uses the follow-up presentation when it accepts a turn for execution.
+**V6a:** The following roles MUST provide *document commands* for non-interactive use:
+
+| Role | Recommended command name |
+|---|---|
+| Start a conversation | `run` |
+| Follow up | `continue` |
+| Correct active work | `steer` |
+| Wait for work | `wait` |
+
+On non-TTY stdout, these commands MUST default to the tagged `text` presentation below.
+This applies to both answers and acceptance receipts; a receipt with no answer omits the `<answer>` section.
+A separate queue-restart command uses the same presentation when it accepts a turn for execution.
+Status, cancellation, enqueue, and queue reads follow the general format-selection rule (O2c), normally JSON on non-TTY stdout.
 Explicit JSON returns the original answer string rather than the text wrapper and can include more metadata under the text-selection rule (V6c).
 
 Help MUST describe `--json` as a choice for programmatic parsing, not as a prerequisite for an agent to read an answer.
@@ -2216,7 +2225,7 @@ An answer-reading breadcrumb SHOULD use the default presentation unless the work
 - The `<result>` opening tag carries the session identifier and `status` as double-quoted attributes. Their attribute names are the JSON field names.
 - If the JSON contract requires `partial`, the opening tag MUST include the same boolean value as JSON.
 - Fields selected for text metadata under the selection rule (V6c) MUST appear as one JSON object in `<metadata>`. Fields already shown as attributes and the answer field are excluded. With no selected fields, this section can be omitted.
-- An available answer MUST appear in `<answer>`, preserving its line breaks and Markdown except for the escaping below. With no answer, omit the section; do not invent an empty answer.
+- An available answer MUST appear in `<answer>`, preserving its text, including line breaks and Markdown, except for terminal-control escaping (O3d). With no answer, omit the section; do not invent an empty answer.
 - Each section's opening and closing tags and the closing `</result>` MUST occupy their own lines. Add a separating newline before a closing tag if needed. That newline is not part of the answer.
 
 Attribute names MUST start with an ASCII letter or underscore and contain only ASCII letters, digits, underscores, or hyphens.
@@ -2224,13 +2233,12 @@ Attribute names MUST start with an ASCII letter or underscore and contain only A
 **Escaping:**
 
 - Attribute values MUST escape `&`, `<`, `>`, and `"` as `&amp;`, `&lt;`, `&gt;`, and `&quot;`. Tabs, CR, and LF use `&#9;`, `&#13;`, and `&#10;`. Other values use their documented text form.
-- In metadata JSON, `<` MUST be escaped as `\u003c`, including in property names, so metadata cannot introduce wrapper tags.
-- In the answer, terminal-control escaping still applies (O3d). `<` MUST be displayed as `&lt;` when followed by an optional `/`, then exactly `result`, `metadata`, or `answer`, then `>`, `/`, or ASCII whitespace (space, tab, CR, or LF). Matching is case-sensitive; other `<` characters are unchanged by this rule.
+- Metadata uses ordinary JSON serialization; no additional escaping of `<` is required.
+- Answer text uses only terminal-control escaping (O3d). Literal HTML or XML tags are preserved, including inside code examples.
 
-For example, `</answer>` and `<answer/>` display as `&lt;/answer>` and `&lt;answer/>`.
-Delimiter escaping does not change `<answers>`, `<Answer>`, or `a < b`.
-Escaping keeps answer or metadata content from looking like a section boundary to a human or model reader.
-This is a readable presentation with tags, not strict XML. Use JSON to recover the original answer text programmatically.
+For example, `Close with </answer>.` remains unchanged in the answer.
+Literal wrapper tags can therefore also occur in answer text.
+This is a readable presentation, not strict XML or an unambiguous format for parsing sections. Use JSON to recover the original answer text programmatically.
 The tags do not make an agent's answer trusted instructions.
 
 **V6c:** The text presentation MUST retain these details when present in the JSON result:

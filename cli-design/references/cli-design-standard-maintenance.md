@@ -69,7 +69,7 @@ Presence conditions distinguish required presence from forbidden presence; neith
 3. Read the affected stage in full, every requirement it references, and every passage that references a changed rule; the words before an identifier must still match the rule.
 4. Recheck terminology, examples, data flow, brownfield impact, and compatibility. Track the inputs and effects across the operation being described, distinguishing an internal request from the whole CLI call where relevant.
 5. For a material contract change, review one stable draft independently and deduplicate the findings before editing again.
-6. Run the checks below and review the rendered document. Before changing the version, compare the contract with the previous release against the `0.1.x` promise in Conformance and record the decision.
+6. Run the checks below and review the rendered document. Before changing the version, compare the contract with the previous release against the `0.1.x` promise in Conformance and record the decision. The change record of each draft and release identifies changes to allowed behavior and caller guarantees, including names, types, meanings, keywords, applicability conditions, and exceptions, separately from editorial changes, so an implementer can tell them apart.
 
 ## Verification
 

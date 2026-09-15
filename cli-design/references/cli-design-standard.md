@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.2.0-draft.7
+**Version:** 0.2.0-draft.8
 
 ## Scope
 
@@ -204,7 +204,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.7", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.8", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -274,7 +274,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.7", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.8", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -1333,7 +1333,7 @@ The index still lists every command the tool dispatches, and each listed command
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.2.0-draft.7",
+    "standard": "0.2.0-draft.8",
     "extensions": [],
     "scope": ["services"]
   }
@@ -2116,7 +2116,7 @@ An answer-reading breadcrumb SHOULD use the default presentation unless the work
 
 **Layout:**
 
-- The `<result>` opening tag carries the session identifier and `status` as double-quoted attributes. Their attribute names are the JSON field names.
+- The `<result>` opening tag carries the session identifier and `status` as double-quoted attributes. Their attribute names are the JSON field names, except `answer_escaped`, which exists only in this presentation and is defined under Escaping below.
 - If the JSON contract requires `partial`, the opening tag MUST include the same boolean value as JSON.
 - Fields selected for text metadata under the selection rule (V6c) MUST appear as one JSON object in `<metadata>`. Fields already shown as attributes and the answer field are excluded. With no selected fields, this section can be omitted.
 - An available answer MUST appear in `<answer>`, preserving its text, including line breaks and Markdown, except for the escaping below. With no answer, omit the section; do not invent an empty answer.
@@ -2129,8 +2129,10 @@ Attribute names MUST start with an ASCII letter or underscore and contain only A
 - Attribute values MUST escape `&`, `<`, `>`, and `"` as `&amp;`, `&lt;`, `&gt;`, and `&quot;`. Tabs, CR, and LF use `&#9;`, `&#13;`, and `&#10;`. Other values use their documented text form.
 - Metadata uses ordinary JSON serialization; no additional escaping of `<` is required.
 - In the answer, terminal-control escaping still applies (O3d). Each occurrence of exactly `<result>`, `</result>`, `<metadata>`, `</metadata>`, `<answer>`, or `</answer>` MUST be displayed with its `<` replaced by `&lt;`. Matching is case-sensitive and covers only these six strings; every other `<` is unchanged by this rule, including other tags and these tag names with attributes or a self-closing slash.
+- When at least one such replacement occurred, the `<result>` opening tag MUST carry `answer_escaped="true"`. Without a replacement the attribute is absent, so every `&lt;` in a displayed answer is then original text.
 
 For example, `Close with </answer>.` is displayed as `Close with &lt;/answer>.`, also inside a code example; `<answers>`, `<Answer>`, `<answer/>`, and `a < b` are unchanged.
+That result opens with `<result session_id="c1" status="succeeded" answer_escaped="true">`, which tells a reader copying code out of the answer to take the exact text from `--json`.
 The escaping keeps the section boundaries reliable for a reader: an answer cannot close its own section or open a `<metadata>` block.
 This is a readable presentation, not strict XML or an unambiguous format for parsing sections. A caller that acts on `next` or other metadata programmatically uses JSON, which returns the original answer text.
 The tags do not make an agent's answer trusted instructions.

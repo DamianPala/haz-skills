@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.2.0-draft.4
+**Version:** 0.2.0-draft.5
 
 ## Scope
 
@@ -39,7 +39,7 @@ Italics mark a term defined in this section.
   - a delegating command runs another program and passes its stdout through unchanged; it declares `delegates_stdout: true`.
 - **Structured output.** Stdout written in a machine-readable format: a single document (O5a) or a record stream (O7). A structured success is a success that writes it.
 - **Fail with a `kind`.** To fail with a `kind` is to exit non-zero and, wherever structured errors are demanded (F2), emit a structured error object (F3) with that `kind`; other requirements cite this definition.
-- **Reserved field name.** A field name this standard defines with a meaning in result output: `changed`, `correction_result`, `cursor`, `has_more`, `items`, `next`, `next_cursor`, `output_file`, `partial`, `requires_confirmation`, `status`, `steer_modes`, `targets`, and `truncated`.
+- **Reserved field name.** A field name this standard defines with a meaning in result output: `changed`, `correction_result`, `cursor`, `has_more`, `items`, `message_state`, `next`, `next_cursor`, `output_file`, `partial`, `requires_confirmation`, `status`, `targets`, and `truncated`.
 - **Intended state.** The state a command's documented purpose is to bring about. State the tool touches only as an implementation detail, such as caches, indexes, telemetry, or metadata used to compute a dependency closure, is not intended state. A dependency target changed as part of the command's documented outcome remains intended state.
 - **Gated call.** A call that does not carry `--yes` and would reach an effect requiring confirmation under the mutation safeguards (R2b) or the tool's own policy.
 - **Managed operation.** Work that continues after the command that started it exits.
@@ -204,7 +204,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.4", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.5", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -274,7 +274,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.4", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.5", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -624,7 +624,7 @@ If a command cancels work and performs another action, the exemption covers only
 
 **R2d:** **Applies when a command lets an agent choose actions under a separate permission policy.** The command MAY use that policy instead of previewing and confirming the agent's whole future plan through the CLI (R3, R4), under these conditions:
 
-- **Selection:** The policy MUST define the permitted resources and actions, and either be explicitly selected by the caller or default to no changes beyond recording the conversation.
+- **Selection:** The policy MUST define the permitted resources and actions, and either be explicitly selected by the caller or default to no changes beyond recording the conversation. Read-only actions permitted by the policy do not violate this default.
 - **Enforcement:** The tool MUST enforce the policy before an action can exceed its limits, including an action through a tool or subprocess. An action outside the policy requires separate explicit permission.
 - **Inspection:** Command detail MUST explain how to select and inspect the policy in a *non-interactive context*. This explanation includes any restrictions the tool cannot enforce and any conditions needed for enforcement. For accepted work, inspection MUST show the policy that applies to that work.
 - **Unavailable enforcement:** If the tool cannot enforce the selected policy, the command MUST fail before starting agent work. If the tool detects that enforcement was lost during work, it MUST stop submitting further actions, request termination, and report the loss and last known state. It cannot claim that the work stopped or complied with the policy unless it verified that fact.
@@ -762,7 +762,7 @@ A command that waits for work it started reports failure or timeout under R7d.
 Observing and controlling the work after the call exits falls under the `managed` extension when claimed (M1 to M3).
 
 **R7a:** An *accepting call* MUST return a non-empty canonical identifier in structured success output.
-The identifier MAY consist of several fields, such as a session identifier and a turn number. Together, those fields identify the work.
+The identifier MAY consist of several fields, such as a resource identifier and an operation number. Together, those fields identify the work.
 Its field names and types are tool-defined. They MUST be documented in `output_description` and remain consistent across the command that starts the work and every command that addresses it.
 
 In the managed-operation rules (M1 to M3), "the identifier" means all components under those names.
@@ -1326,7 +1326,7 @@ The index still lists every command the tool dispatches, and each listed command
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.2.0-draft.4",
+    "standard": "0.2.0-draft.5",
     "extensions": [],
     "scope": ["services"]
   }
@@ -1605,7 +1605,8 @@ In this example:
 
 **M2a:** **Applies when a managed operation can be canceled.** The tool MUST provide a cancellation command, usable in a *non-interactive context*, whose name follows the naming preferences in D4b. It MUST accept the identifier returned under R7a and fall under Stage R.
 The command MUST declare `effects: idempotent`, except that a conversational cancellation command offering session-based selection follows the effect-classification rule (R1).
-Repeated session-based cancellation can select different queued work, so it does not always meet the successful-repeat guarantee.
+Repeated session-based cancellation can select newly started work, so it does not always meet the successful-repeat guarantee.
+Stopping a conversational follow-up queue follows its conditional rules (V4d); it does not delete queued messages.
 
 **M2b:** Structured success MUST contain `status` and the identifier; `changed` reports whether this call caused a new intended state transition, not whether the managed operation completed (R5a). Exit `0` means cancellation was accepted or a terminal state was observed, not necessarily that the operation was canceled. The command MUST NOT report `canceled` until it observes that state; if the operation reaches another terminal state before cancellation completes, the command MUST report that observed terminal state.
 
@@ -1660,77 +1661,81 @@ $ mytool jobs resume job_123 --json
 **Applies when:** the tool names `conversational` in `conformance.extensions`.
 
 This extension lets a caller keep a conversation, receive an agent's answer, and correct ongoing work.
-It applies to the public interface whether the tool calls a model API, runs an agent loop, or connects to another agent system.
+It applies whether the tool calls a model API, runs its own agent loop, or connects to another agent system.
 
 | Term | Meaning in this extension |
 |---|---|
-| **Session** | A conversation and its retained context, shared across turns. |
-| **Turn** | One cycle of agent work. It begins when the tool accepts an instruction to start the cycle. It ends when the cycle completes, is canceled, or fails permanently. A cycle can include multiple model requests, messages, and tool calls. |
-| **Active turn** | A turn that has begun executing and is not terminal, including while waiting for tools, subagents, caller input, or a temporary limit to clear. |
-| **Queued input** | An accepted message waiting for delivery, either to the active turn or as a follow-up. Several queued messages can belong to one turn. |
-| **Queued turn** | A cycle of future work accepted but not yet executing. The tool can track it internally without exposing a turn identifier. |
+| **Session** | A conversation and its retained context, shared across turns. The caller addresses it by a session identifier. |
+| **Turn** | One cycle of agent work, accepted for execution. It can include multiple model requests, messages, and tool calls. |
+| **Active turn** | A turn accepted for execution that has not ended, including while waiting to start, for tools, subagents, caller input, or a temporary limit to clear. |
+| **Pending input** | An accepted message waiting for delivery. It can guide the active turn or wait in a follow-up queue. |
+| **Follow-up queue** | Optional storage for messages to execute later. Accepting a queued message does not yet accept a turn for execution. |
 
-A turn ends when its work completes, is canceled, or fails permanently. The tool reports that terminal state under the managed-operation rules (M1, M2).
-None of these events ends the turn by itself: another user message, a progress message, the end of one model request, or a pause while waiting for other work.
-An in-place correction belongs to the active turn; a follow-up starts a new one.
-Returning control to the caller while work continues in the background does not end that work's turn.
-A turn's terminal state does not end the session or establish that the caller's goal was achieved.
+**When a turn ends:**
+A turn ends when its work completes, is canceled, or fails permanently. The tool reports that state under the managed-operation rules (M1, M2).
+A completed turn does not end the session or prove that the caller's goal was achieved.
 
-For example, the agent can run a tool, receive a correction, apply it after the tool finishes, and complete the same turn.
+**What stays in the same turn:**
+Progress messages, tool calls, and waiting for other work do not end the turn.
+An in-place correction adds guidance to that turn; a follow-up starts another.
+Returning control to the caller while work continues in the background does not end the turn either.
+
+For example, an agent can run a tool, receive a correction, apply it after the tool finishes, and complete the same turn.
 
 **Minimum interface:**
 The tool MUST also claim [`managed`](#extension-managed-accepted-work-must-be-observable).
-For this extension, a turn is the managed operation. Callers can address it by session alone under the session-addressing rule (V1b).
-The tool MUST provide all of these operations: start a conversation, follow up, read status, wait, cancel, and use at least one shared correction mode from V3a.
+A turn is the managed operation; its public address is the session under the session-addressing rule (V1b).
+The tool MUST provide these roles: start a conversation, follow up, read status, wait, cancel, and correct work using at least one shared mode from V3a.
 
-This minimum applies to the agent configuration selected for the session.
-If the tool knows that the configuration does not support it, the tool MUST reject the configuration before acceptance.
-If support can be established only after acceptance, the tool MUST establish it before executing the first turn. Lack of support ends that accepted turn as `failed` without executing the agent.
+The tool SHOULD use these role names:
+
+| Role | Name | Caller's intent | Availability |
+|---|---|---|---|
+| Start | `run` | Start a conversation and its first turn. | Required. |
+| Follow up | `continue` | Start another turn with retained context. | Required. |
+| Correct | `steer` | Change the approach to active work. | Required. |
+| Queue | `queue` | Save a message to execute after current work. | Optional; follow-up queue rules apply when offered (V4d). |
+
+The minimum applies to the agent configuration selected for the session.
+The tool MUST establish this support before accepting the session's first work.
+If it cannot, the start call MUST fail before agent work executes.
 Temporary unavailability can still prevent a supported operation from succeeding.
-Additional commands and capabilities are allowed and follow the requirements that apply to their behavior.
+Additional commands, history reads, and selectors are allowed and follow the general requirements for their behavior.
 
 ### V1: Conversation identity and capabilities MUST be explicit.
 
 **V1a:** Starting a conversation and sending a follow-up MUST meet both conditions:
 
-- Work in a *non-interactive context*.
+- Be usable in a *non-interactive context*.
 - Offer a way to return after acceptance without waiting for the answer.
 
-The tool SHOULD name these roles `run` and `continue`.
-A follow-up starts a new turn using the session's retained context; it does not restore the running state of a canceled process.
-Pausing and resuming the same operation follow the suspension rules (M3).
+The tool can also offer an interactive conversation in a *terminal context* under the interactive-session rules (I5b).
+Interactive use does not replace these non-interactive operations.
+
+A follow-up starts a new turn using retained context and recorded progress.
+The follow-up role MUST support continuing canceled or failed work without requiring a new message from the caller.
+The tool MUST document how it handles this no-message request.
+It can use a native continuation mechanism or supply its own instruction to continue the unfinished work.
+Pausing and resuming the same operation follow the separate suspension rules (M3).
 
 **V1b:** A session MUST have a non-empty public identifier.
-The tool MUST support using that identifier alone for follow-up, status, wait, cancellation, and correction.
-Public turn identifiers and exact-turn selection are optional features of the tool.
+Follow-up, status, wait, cancellation, and correction MUST accept that identifier alone.
+An offered follow-up queue's enqueue, inspection, and restart roles MUST do so too.
+No public turn or message identifier is required.
 
-**Session addressing:**
-For accepted work and managed commands, the session identifier is sufficient public identification (R7, M1 to M3).
-It identifies the same conversation across turns.
-The `status` field describes the turn selected for the call, not the end of the conversation.
-The call-target rules define how to select and keep that turn (V2).
+The session identifier is the public identifier of accepted work and managed commands for that conversation (R7, M1 to M3).
+A structured result about a turn MUST contain the session identifier and `status`, including an acceptance receipt.
+The status describes the work selected for the call under the call-target rules (V2), not the end of the conversation.
 
-A structured result describing one turn MUST contain the session identifier and `status`, including an acceptance receipt.
-A structured error MUST include the session identifier in `context` when supplied or obtained, including when a session-start call fails.
-No internal identifier is required in the public interface.
-
-**Optional turn addressing:**
-If the tool exposes turn identifiers, a turn's full identifier MUST identify only that turn. It MUST NOT be reassigned while its session identifier remains valid, even if the retained turn data expires.
-This includes identifiers returned in an error before acceptance was confirmed.
-
-A full turn identifier can be one self-contained value, or a local value combined with the session identifier.
-When the tool exposes turn identifiers, structured results describing one turn MUST include its identifier. Errors about that turn include the known identifier components in `context`.
-Correction distinguishes the selected and successor turns under its result rule (V3b).
-
-**Field contract:**
-Field names for identifiers, the answer, and the session-capability object are tool-defined. They MUST be consistent across these roles and MUST be identified in each command detail's `output_description`.
-The description also explains any optional turn addressing.
+A structured error MUST include the session identifier in `context` when supplied or obtained.
+Field names for the session identifier, answer, and session-capability object are tool-defined.
+They MUST be consistent across these roles and identified in each command detail's `output_description`.
 The answer field, when present, MUST be a string containing the answer text alone.
 
 **Session choices:**
-Follow-up, correction, and automatic resumption MUST NOT silently broaden the session's selected permission policy or substitute its selected model.
+Follow-up, correction, queued work, and automatic resumption MUST NOT silently broaden the session's selected permission policy or substitute its selected model.
 
-**Example: starting a conversation with only a session ID.** This tool exposes no turn identifiers or turn selectors.
+**Example: starting a conversation.**
 It uses `session_id`, `answer`, and `capabilities` for the tool-defined fields.
 The agent can read its workspace; recording the conversation is the only mutation the call authorizes.
 `--background` selects returning after acceptance.
@@ -1745,153 +1750,113 @@ $ mytool run worker 'Explain why login fails' --background --json
   "status": "running",
   "changed": true,
   "partial": false,
-  "capabilities": {"steer_modes": ["cancel-then-start"]},
+  "capabilities": {"steer_mode": "cancel-then-start"},
   "next": ["mytool", "wait", "c1"]
 }
 ```
 
 `partial: false` means this is a complete acceptance receipt, not a completed answer.
-The caller uses `wait c1`, `steer c1 ...`, or `cancel c1` without learning a second identifier.
+The caller can now use `wait c1`, `steer c1 ...`, or `cancel c1`.
 After this work ends, `continue c1 ...` starts new work in the same conversation.
 
-**V1c:** The session-capability object MUST appear in structured acceptance receipts and status results. This includes a status result for an older turn.
-It describes the current session, not the historical capabilities of the reported turn.
+**V1c:** The session-capability object MUST appear in structured receipts from the start, follow-up, correction, and queue roles, and in the status command's results.
+It describes the current session, even when status reports work that has already ended.
 
-The object MUST contain `steer_modes`. Its value is an array of supported correction-mode names in preference order, or `null` while the modes are unknown.
-The field follows these rules:
+The object MUST contain `steer_mode`: a non-empty string naming the default correction mode for the session.
+The field name is defined here only within the session-capability object.
+The default is `in-place` when supported for the session's configuration, otherwise `cancel-then-start`.
+A correction without an explicit mode choice MUST use that declared mode.
+A busy turn or temporary backend failure does not change the declared mode.
 
-- When both shared modes are supported, `in-place` MUST precede `cancel-then-start`.
-- An empty array means no mode is currently supported. It MUST NOT mean that the modes are unknown.
-- A busy turn or temporary backend failure does not remove a supported mode from the array.
+Command detail MUST document the default correction behavior.
+Receipts and status report the session's mode; they do not require the caller to choose one.
 
-The modes may be known at session creation or established later.
-An acceptance receipt can use `null` before they are known; a later status read supplies them.
-
-Command detail MUST document the correction modes and any default mode.
-Runtime values belong in receipts and status, while command detail describes their meaning.
-Introspection stays independent of the network under the local-introspection rule (D5c).
-
-**Example: inspecting an older turn.** This separate tool offers optional turn addressing using `session_id` and a local integer `turn`.
-Assume later turns have been accepted in session `c1`.
-With non-TTY stdout, this call reads turn 1's state and the session's current capabilities:
+**Example: inspecting a session.** Work in session `c1` succeeded, and the session uses in-place correction by default.
+With non-TTY stdout, this call returns JSON by default:
 
 ```console
-$ mytool status c1 --turn 1
+$ mytool status c1
 ```
-
-Turn 1 succeeded, and the session now supports two correction modes:
 
 ```json
 {
   "session_id": "c1",
-  "turn": 1,
   "status": "succeeded",
-  "capabilities": {"steer_modes": ["in-place", "cancel-then-start"]}
+  "capabilities": {"steer_mode": "in-place"}
 }
 ```
 
-The first mode is a preference, not permission to switch modes after a failure.
+During active work, the caller uses `steer c1 MESSAGE` without a mode flag.
 
-### V2: Each call MUST keep its selected turn.
+### V2: Each call MUST keep its selected work.
 
 **V2a:** A session MUST have at most one active turn.
-Each status, wait, cancellation, correction, pause, or resume call selects one turn and stays bound to it.
-A queue read describes pending input, not one selected turn.
-If the tool offers exact-turn selection, it MUST use the requested turn without substituting another.
-No particular selector flag is required.
-When the caller addresses only the session, the tool MUST choose as follows:
+When the caller addresses the session, the tool MUST select work as follows:
 
-| Role | Turn selected at the start of the call |
+| Role | Work selected at the start of the call |
 |---|---|
-| Status or wait | The active turn; otherwise the next queued turn in the declared execution order; otherwise the latest accepted turn. |
-| Cancellation | The same selection as status or wait. An already terminal turn is a no-op reporting its observed state. |
+| Status or wait | The active turn; otherwise the most recent terminal turn. |
+| Cancellation | The same selection as status or wait. A terminal turn keeps its observed state. |
 | Correction | The active turn. With none active, fail with `kind` `conflict`. |
 | Pause or resume, when supported | The same selection as status or wait; suspension behavior follows M3. |
 
-An unknown or expired session or explicitly selected turn MUST fail with `kind` `not_found` under the rule for expired identifiers (M1d).
-For a known session, correction without an active turn fails with `conflict`, as shown in the table.
-Status, wait, cancellation, pause, or resume with no turn to select MUST fail with `not_found`.
-Results and errors use the public identifiers required by the session-addressing rule (V1b). They do not invent an unresolved identifier or state.
-A `null` status in a wait error means no state was observed (M1b); it is not a fabricated operation state.
+A follow-up queue read describes pending messages, not a selected turn.
+Status, wait, and cancellation do not select a message from that queue.
+An unknown or expired session, or a status, wait, cancellation, pause, or resume call with no work to select, MUST fail with `kind` `not_found` under the identifier rule (M1d).
+A `null` status in a wait error means no state was observed (M1b).
 
-**V2b:** For the single-turn roles above, the tool MUST prevent a call from switching targets after selection. This requires coordinating target selection, control requests, and acceptance of later turns.
-These rules apply whether selection was explicit or used the default:
+**V2b:** A call in the selection table above MUST keep its selected work until the call ends.
+A control request MUST NOT act on newer work if its selected work ends before the request takes effect.
+A correction whose selected work is no longer eligible MUST fail with `kind` `conflict`, except for the completed-work case in the cancel-then-start rule (V3c).
 
-- **In-place correction:** When the tool accepts the instruction, it MUST target the active turn. Otherwise, it fails with `kind` `conflict`. Queued later turns do not prevent the correction.
-- **Cancel-then-start, before cancellation:** If a later turn has already been accepted, the correction MUST fail with `kind` `conflict`. It fails before requesting cancellation or accepting a new turn.
-- **Cancel-then-start, during cancellation:** If another call accepts a later turn, the correction MUST fail with `conflict`. The correction does not accept a new turn or change the later turn. Its error reports any cancellation already performed under the correction-result rule (V3b).
+A new call selects again and can observe or control newer work.
+The tool MUST document this behavior for cancellation and correction.
 
-Cancellation of an older terminal turn reports that turn's state without canceling a newer one.
-Without a selector, a new call can intentionally select a different current turn. The tool MUST document this behavior for cancellation and correction.
-Built-in retries still follow the safe-retry rules (R6).
+**Example: a wait and a late cancellation.** `mytool wait c1` keeps observing the work selected at the start, even if new work is later accepted.
+After a timeout, another `wait c1` selects again and can observe newer work.
 
-**Example: waiting through a session.** `mytool wait c1` selects a turn at the start of the call and keeps waiting for that turn even if later work is accepted.
-After a timeout, a new `wait c1` selects again and can observe newer work.
-If the tool offers turn addressing, `mytool wait c1 --turn 3` can keep observing a particular earlier turn across calls.
-A session-only tool does not promise that historical selection.
+If `cancel c1` selects work that finishes just before cancellation takes effect, the command reports its actual terminal state.
+It does not cancel a newer turn or claim that the selected work was canceled.
+Stopping automatic queue execution, when a queue exists, follows the follow-up queue rules (V4d).
 
-**Example: a late control request.** This tool offers exact-turn selection.
-Assume turn 3 succeeded and turn 4 is running:
+**V2c:** A direct follow-up MUST fail with `kind` `conflict` while work remains non-terminal.
+With a follow-up queue that can still start automatically, it MUST also fail while that queue holds pending messages.
+While the queue is stopped, a direct follow-up can start work with or without a new message.
+Until acceptance of that work is confirmed, the queue MUST remain stopped.
+On acceptance, the tool MUST re-enable automatic queue execution; queued messages run only after the follow-up ends, under the documented execution policy (V4d).
 
-| Call | Outcome |
-|---|---|
-| `mytool cancel c1 --turn 3 --json` | Exits `0` with `status: "succeeded"` and `changed: false`; leaves 4 alone. |
-| `mytool steer c1 'Use the existing helper' --turn 3 --json` | Fails with `conflict`; leaves 4 alone. |
-| `mytool cancel c1 --json` | Selects turn 4 and requests its cancellation. |
-
-The first call succeeds because the selected turn already ended; it does not claim that cancellation caused that end.
-This also covers a turn finishing just before the cancellation request, or repeating a cancellation after the turn was canceled.
-A tool can also offer individual cancellation of queued work, without making it a requirement for every queue (V4c).
-
-**V2c:** A tool can accept a follow-up for later execution while another turn is active.
-This requires an explicit queueing choice. It can be an option on the follow-up command or a separate command; neither interface is required.
-Queued turns follow the delivery and queue-inspection rules (V4).
-A follow-up without an explicit queueing choice MUST fail with `kind` `conflict` while a turn remains active or queued. Automatic waiting for a rate limit to clear still counts as active.
-If a guard names the previous turn, the tool MUST accept the follow-up only when that turn is terminal and remains the latest accepted turn. Otherwise, it fails with `kind` `conflict`.
-A tool with public turn addressing SHOULD provide such a guard when callers may share a session.
-
-**Example: a guarded follow-up.** This tool provides the guard as `--after-turn`:
-
-```console
-$ mytool continue c1 'Explain the second failure' --after-turn 3 --background --json
-```
-
-If turn 4 has already been accepted, the call fails with `conflict` instead of starting another turn.
+**Example: choosing when a message applies.** While the agent works on login, a caller can use `steer c1 'Check the expiry first'` to correct that work.
+A tool with a follow-up queue can accept `queue c1 'Then add tests'` for later.
+`continue c1 'Then add tests'` fails with `conflict` while work is still running.
 
 ### V3: Correction MUST report what was accepted or delivered.
 
-The caller's intent determines when the instruction belongs:
+Correction changes the approach to current work.
+The supported mode determines whether that work stays in the same turn or continues in a new one.
 
-| Intent | Behavior |
-|---|---|
-| Add guidance to the current work | Deliver to the active turn at a supported point, such as after tool use. This is in-place correction. |
-| Do additional work after the current work | Accept a follow-up as a future turn through an explicit queueing choice, if supported. |
-| Stop the current approach and start corrected work | End the selected turn, then start a new turn with retained context and progress. This is cancel-then-start. |
-
-**V3a:** The tool SHOULD name the correction role `steer`.
-These shared mode names have the following meanings:
+**V3a:** These shared mode names have the following meanings:
 
 | Mode | Meaning |
 |---|---|
 | `in-place` | Adds the instruction to the active turn, possibly at the next supported point after tool use. It does not start a new turn. |
 | `cancel-then-start` | Requests cancellation of the selected turn, then starts a new turn using the same session's retained context and recorded progress after the selected turn is known to have ended. |
 
-A tool MAY define additional modes with documented meanings.
-A mode-selection flag is optional. A command can implement one fixed mode.
-If present, its name is tool-defined.
-An explicitly selected unavailable mode MUST fail before effects, without falling back to another mode.
+A tool MAY offer additional modes or an explicit choice with documented behavior.
+An explicit choice the session does not support fails before effects under the invalid-input rules (I6).
+After a failure, the tool cannot switch modes silently under the no-silent-substitution rule (F4c).
 
 The declaration for the whole command still follows the effect-classification rule (R1); idempotent cancellation does not make cancel-then-start idempotent.
 
 **V3b:** A structured correction result MUST include `correction_result` with the fields below.
-The table defines these field names only within `correction_result`, including when the object uses a replacement name under the retained-name rule (B4c).
-The names are not reserved outside the object.
+The table defines the fields inside `correction_result`, including when the object uses a replacement name under the retained-name rule (B4c).
+`target_status` is not reserved outside this object.
+`steer_mode` also names the default mode in the session-capability object (V1c); here it reports the mode selected for this call.
+`message_state` also describes acceptance in queue receipts under the follow-up queue rule (V4d).
 
 | Field | JSON type | Presence | Value and meaning |
 |---|---|---|---|
 | `steer_mode` | string | MUST, always | Selected mode. |
-| `target_turn` | Same JSON type as the turn identifier value | MUST when the tool exposes a known identifier for the selected turn; omitted otherwise | Selected turn's self-contained or session-local identifier. A local value uses the enclosing session identifier. |
-| `target_status` | string or null | MUST, always | Last observed state of that turn, or `null` if none was observed. |
+| `target_status` | string or null | MUST, always | Last observed state of the selected work, or `null` if none was observed. |
 | `message_state` | string | MUST, always | `accepted`: responsibility for handling the instruction was accepted; `delivered`: inclusion in the intended turn's context was confirmed; `not_delivered`: the instruction is known not to have reached that context; `unknown`: acceptance or delivery cannot be determined. |
 
 **Session and turn results:**
@@ -1900,15 +1865,6 @@ On success, the outer `status` describes the turn to observe next. This is the s
 `target_status` always describes the originally selected turn.
 If correction fails after selecting its target, the error's `context` MUST include `correction_result` with the last known facts.
 
-When the tool exposes turn identifiers, they follow this mapping:
-
-| Mode | Turn identifier on success | Turn identifier in error `context` |
-|---|---|---|
-| `in-place` | Selected turn | Selected turn, if known |
-| `cancel-then-start` | Accepted new turn | New turn, only if obtained |
-
-`correction_result.target_turn`, when present, identifies the originally selected turn in both modes.
-
 **Acceptance and delivery:**
 For in-place, the instruction is intended for the selected turn. For cancel-then-start, it is intended for the new turn.
 Command detail states whether success means that the tool accepted the instruction or confirmed delivery.
@@ -1916,10 +1872,9 @@ An in-place receipt can report `accepted` before delivery is confirmed.
 
 **Evidence:**
 The tool MUST NOT infer `delivered` from a transport write alone or report it as a guarantee that the agent obeyed the instruction.
-When turn identifiers exist, reserving one does not prove acceptance. A missing identifier does not prove non-acceptance.
 Uncertain effects follow the uncertain-outcome rule (F4a).
 
-**Example: an in-place receipt without turn IDs.** This tool exposes only the session and reports acceptance before delivery is confirmed.
+**Example: accepting an in-place correction.** This tool reports acceptance before delivery is confirmed.
 `mytool steer c1 'Check the expiry first' --json` succeeds with this stdout:
 
 ```json
@@ -1929,9 +1884,7 @@ Uncertain effects follow the uncertain-outcome rule (F4a).
   "changed": true,
   "partial": false,
   "capabilities": {
-    "steer_modes": [
-      "in-place"
-    ]
+    "steer_mode": "in-place"
   },
   "correction_result": {
     "steer_mode": "in-place",
@@ -1941,143 +1894,183 @@ Uncertain effects follow the uncertain-outcome rule (F4a).
 }
 ```
 
-The caller can use `wait c1` to observe the work; no `target_turn` is needed.
+The caller can use `wait c1` to observe the work.
 
-**V3c:** **Applies when using `cancel-then-start`.** The tool MUST NOT start the successor based only on a cancellation timeout.
-Before starting the successor, it MUST either observe that the selected turn ended or establish that fact through another documented guarantee of the interface it uses.
-If the selected turn ends before this cancellation takes effect and no later turn has been accepted, the tool MAY start the requested follow-up, reporting the old turn's actual terminal state.
+**V3c:** **Applies when using `cancel-then-start`.** The tool MUST coordinate these steps:
 
-The tool MUST start the new turn with all of the following: the correction instruction, the session's retained context, and access to recorded progress. Recorded progress includes retained tool results and existing work artifacts.
+1. Request cancellation of the selected work and establish that it ended, by observation or a documented guarantee of the interface used.
+2. Start the corrected work in the same session.
+
+A cancellation timeout alone MUST NOT permit the second step.
+If the selected work finishes before cancellation takes effect, the tool MAY proceed when no other work has since been accepted for execution. It reports the old work's actual terminal state.
+If another call starts different work before the correction can proceed, the correction MUST fail with `conflict` without changing that newer work.
+
+**Preserving progress:**
+The new turn MUST receive the correction instruction, retained conversation context, and access to recorded progress, including retained tool results and existing work artifacts.
 Switching turns MUST NOT by itself reset the conversation, undo completed effects, or discard retained results.
 The tool does not have to preserve a stopped process's memory or unrecorded model reasoning.
-If the context cannot be restored, the context-restoration rule applies (V5c).
+Unavailable context follows the recovery rules (V5c).
 
-Expiration of the call's deadline does not undo a cancellation already requested.
-Deadline and uncertain-effect errors keep their meanings (F3c, F4a).
-The correction result preserves the known target and message facts (V3b).
+**With a follow-up queue:**
+Pending follow-up messages MUST NOT prevent correction.
+The tool MUST preserve them and prevent automatic queue execution between cancellation and acceptance of the corrected work.
+If the correction request fails after cancellation was requested, the queue MUST remain stopped until the caller explicitly restarts it.
+This concerns the two steps above, not the agent's later execution of the correction.
+Cancellation inside a successful correction does not stop later queue execution by itself.
 
-The cancellation step follows the narrow-cancellation safeguard (R2c); any other effects retain their safeguards.
+**When a step fails:**
+A deadline does not undo cancellation already requested.
+Errors preserve the known state and message facts in `correction_result` (V3b), following the deadline and uncertain-effect rules (F3c, F4a).
+The cancellation step follows the narrow-cancellation safeguard (R2c); other effects retain their safeguards.
 
-**Example: redirecting a running turn.** This tool offers public turn identifiers and both correction modes, selected by `--steer-mode`.
-The following call cancels turn 3 and accepts turn 4 in the same session:
+**Example: redirecting work without losing progress.** This tool uses `cancel-then-start` as its default correction mode.
+The current work has changed five files and recorded test results during 30 minutes of execution.
+Two additional messages wait in its follow-up queue.
 
 ```console
-$ mytool steer c1 'Use the existing OAuth helper' --turn 3 --steer-mode cancel-then-start --background --json
+$ mytool steer c1 'Use the existing OAuth helper' --background --json
 ```
 
 ```json
 {
   "session_id": "c1",
-  "turn": 4,
   "status": "running",
   "changed": true,
   "partial": false,
-  "capabilities": {"steer_modes": ["in-place", "cancel-then-start"]},
+  "capabilities": {"steer_mode": "cancel-then-start"},
   "correction_result": {
     "steer_mode": "cancel-then-start",
-    "target_turn": 3,
     "target_status": "canceled",
     "message_state": "accepted"
   },
-  "next": ["mytool", "wait", "c1", "--turn", "4"]
+  "queue": {"pending_messages": 2, "stopped": false},
+  "next": ["mytool", "wait", "c1"]
 }
 ```
 
-Suppose turn 3 has worked for 30 minutes, changed five files, and recorded test results before the correction.
-Turn 4 follows the correction instruction. It keeps those files and the retained conversation context, and it can access the recorded test results.
-It does not start from an empty conversation or revert the files.
-The caller reads turn 4 next; turn 3's retained answer remains available through an explicit read of turn 3.
+The new turn uses the helper while retaining the files, conversation, and recorded test results.
+The two queued messages still wait for later execution.
+The caller uses `wait c1` to observe the corrected work.
 
-**Example: a correction that did not complete.** The same tool exposes public turn identifiers.
-Each row is a separate cancel-then-start call targeting turn 3, with non-TTY stdin and stderr.
+**Example: a correction that did not complete.** Each row is a separate cancel-then-start call on an active session, with non-TTY stdin and stderr.
 Each call exits non-zero with empty stdout. The last non-empty stderr line contains the error.
 Its `context` includes `session_id` and `correction_result`.
 
 | What the tool knows | `kind` | `target_status` | `message_state` |
 |---|---|---|---|
-| Turn 3 was canceled; the backend temporarily rejected the next prompt. | `unavailable` | `canceled` | `not_delivered` |
-| The deadline expired after requesting cancel; a read still shows turn 3 running. No new instruction was sent. | `timeout` | `running` | `not_delivered` |
+| The selected work was canceled; the backend temporarily rejected the next prompt. | `unavailable` | `canceled` | `not_delivered` |
+| The deadline expired after requesting cancel; a read still shows the selected work running. No new instruction was sent. | `timeout` | `running` | `not_delivered` |
 | Cancel was requested, but its effect could not be observed. No new instruction was sent. | `outcome_unknown` | Last observed state or `null` | `not_delivered` |
 | The next prompt may have been accepted, but its receipt was lost. | `outcome_unknown` | Last observed state or `null` | `unknown` |
 
 The first row produces this error:
 
 ```json
-{"error":{"kind":"unavailable","message":"Turn 3 was canceled; the next prompt was not accepted.","context":{"session_id":"c1","correction_result":{"steer_mode":"cancel-then-start","target_turn":3,"target_status":"canceled","message_state":"not_delivered"}},"hint":"Inspect turn 3 before deciding whether to send the prompt again."}}
+{"error":{"kind":"unavailable","message":"The previous work was canceled; the correction prompt was not accepted.","context":{"session_id":"c1","correction_result":{"steer_mode":"cancel-then-start","target_status":"canceled","message_state":"not_delivered"}},"hint":"Inspect the session before deciding whether to send the prompt again.","next":["mytool","status","c1"]}}
 ```
 
-A cancellation timeout alone does not permit starting a new turn.
 A lost receipt does not prove that the new instruction was rejected.
 
-### V4: Queued input MUST have a declared delivery policy.
+### V4: Pending input MUST have a clear delivery policy.
 
 **Applies when:** the tool accepts a message before it can deliver that message to the agent.
+This includes in-place corrections waiting for tool use to finish. It does not require a follow-up queue.
 
-**V4a:** The tool MUST document these parts of its queue policy:
+**V4a:** The tool MUST document these parts of its pending-input policy:
 
 - The delivery point and ordering.
-- Queue bounds, or an explicit choice to have no bound.
-- What happens to undelivered input when its target turn ends.
-
-A correction delivered after tool use but before the next model step is in-place; input held until the whole turn ends is a follow-up.
+- Storage bounds, an explicit choice to have no bound, or limits the tool cannot determine for corrections forwarded to the system running the agent.
+- What happens to undelivered corrections when their selected work ends.
 
 An in-place correction MUST NOT silently become input to a successor.
-Another message MUST NOT silently overwrite an accepted message.
+Another message MUST NOT silently overwrite accepted input.
 An explicit replacement feature MAY be provided with documented behavior.
 
-**V4b:** A successful enqueue MAY return `message_state: accepted` without waiting for delivery.
+**V4b:** A successful receipt MAY report `message_state: accepted` without waiting for delivery.
 The tool MUST document whether the caller can later distinguish delivery, non-delivery, and an unknown outcome for that instruction, and how to do so.
-If the tool promises a later receipt for one instruction, it MUST retain enough state and provide enough identifying information to retrieve that receipt unambiguously. This remains true after other messages are accepted.
+If later per-instruction receipts are offered, the tool MUST provide an unambiguous way to retrieve each receipt after other messages are accepted.
 
-This extension requires no particular message identifier, receipt command, queue size, or synchronous delivery wait.
-Without a later receipt, acceptance alone does not tell the caller whether a particular instruction eventually reached the agent.
+No particular message identifier or receipt command is required.
 
-**Example: two corrections during one tool call.** This tool accepts several pending corrections in order. It documents that delivery receipts cannot be recovered after disconnection:
+**Example: two corrections during one tool call.** This tool accepts pending corrections in order and does not offer later individual delivery receipts:
 
-1. Turn 3 starts a tool call.
-2. The caller sends X, then Y. Both calls return `accepted` for turn 3.
-3. The tool call ends and the tool adds X and Y before the next model step. Turn 3 continues.
-4. `wait` for turn 3 returns that turn's answer, not separate answers for X and Y.
+1. The agent starts a tool call.
+2. The caller sends corrections X and Y. Both calls return `accepted`.
+3. The tool call ends, and the tool adds X and Y before the next model step in the same turn.
+4. `wait c1` returns that turn's answer, not separate answers for X and Y.
 
-The model may still ignore either instruction.
-If delivery cannot be observed later, the caller cannot infer it from the turn's successful completion.
-An application promising separate receipts for X and Y needs to distinguish them. A single mutable "latest correction" field is insufficient.
+The model may still ignore either instruction. Successful completion alone does not establish delivery.
 
-**V4c:** The tool MUST provide a read, usable in a *non-interactive context*, that shows a session's pending input.
-The read shows either a list or at least a non-negative integer count.
-The read MUST cover both pending in-place messages and queued follow-ups when the tool supports them.
+**V4c:** For each offered follow-up queue, and for corrections whose pending state it can determine, the tool MUST provide a non-consuming read of the session's pending messages, usable in a *non-interactive context*.
+The read MUST use a list or at least a non-negative integer count. A follow-up queue always requires this read, wherever messages are stored.
 The tool MUST document what the list or count includes.
 
-The read MUST NOT consume queued input.
-It reports the queue at read time, not a promise that the queue will remain unchanged.
+If the tool cannot determine whether forwarded corrections are still pending in the system running the agent, it MUST document that limitation and MUST NOT report the unknown state as zero pending corrections.
 
-The read can be part of status or a separate command.
-A list follows the bounded-collection rules (O6).
+The read can be part of status or a separate command. A list follows the bounded-collection rules (O6).
+By default, a list SHOULD show the first 200 characters (Unicode code points) of each message's text, or the whole text if shorter.
+Shortened message text follows the bounded-value rules (O5c); the `truncated` and `output_file` fields belong to the same list item as its preview.
+
+When a follow-up queue is offered, correction and enqueue replies SHOULD include its pending-message count and whether automatic execution is stopped, when these facts can be determined.
+This applies to text and structured replies; on failure, the information belongs in the error's `context`.
+These reads and reply details describe the state when observed, not a promise that it will remain unchanged.
 No particular field name, message identifier, full prompt text, or individual removal command is required.
-A count does not show whether a particular message was delivered. Delivery evidence follows the receipt rule (V4b).
+A count does not establish delivery of a particular message under the receipt rule (V4b).
 
-**Queued follow-ups:**
-If the tool queues follow-ups, it MUST document their execution order and whether they start automatically after the active turn ends or is canceled.
-Canceling one turn MUST NOT cancel other queued turns or discard their input.
+**V4d:** **Applies when the tool offers a follow-up queue.** Queueing MUST require an explicit caller choice, separate from correcting active work or starting a direct follow-up.
+An option on another command can provide the same explicit choice.
+The enqueue, inspection, and restart roles MUST be usable in a *non-interactive context*.
 
-**Example: inspecting a queue with only a session ID.** This tool offers `--enqueue` for follow-ups and reports `pending_messages` in status.
-The count includes all accepted messages not yet delivered, including pending corrections and follow-ups. Queued follow-ups start in order after the active turn ends.
-While work is running, two calls succeed with acceptance receipts:
+**Acceptance:**
+
+- A successful enqueue MUST return the session identifier and `message_state: accepted` in its structured receipt.
+- This confirms responsibility for the message, not acceptance or completion of a turn. The receipt MUST NOT use a turn's `status` to describe a queued message.
+
+**Execution:**
+
+- Each queued message MUST start a new turn when selected for execution. Only then do the turn's acceptance, status, and wait rules apply.
+- The tool SHOULD execute messages in acceptance order and automatically start the next one when current work ends without an explicit stop.
+- The tool MUST document execution order, automatic-start conditions, and queue retention across process exits and restarts.
+- If that policy does not permit automatic execution after work ends, the queue MUST remain stopped until the caller explicitly restarts it.
+
+When the session is idle, an enqueue can start execution immediately unless the queue is stopped.
+It still returns the queue receipt; the caller reads work state through status or wait.
+
+Automatic execution can start newer work before a later `wait` call reads the earlier answer.
+A tool can offer a history read for those answers; this extension does not require one.
+
+**Stopping and restarting:**
+
+- An explicit session cancellation MUST stop automatic queue execution and preserve queued messages under the declared retention policy. This also applies when the selected work is already terminal.
+- Newly queued messages MUST NOT silently restart a stopped queue.
+- The tool MUST document how to restart execution without resubmitting the messages. The follow-up role provides this restart under the follow-up and queue rules (V2c); a separate restart command is optional. Any restart MUST fail with `conflict` while work remains active.
+- If the previous work succeeded and the stopped queue has pending messages, a no-message follow-up MUST start the next queued message directly.
+
+**Example: queueing later work and reading pending input.** This tool offers `queue` and reports its follow-up count and stopped state in `queue` in replies and status.
+The count excludes corrections waiting for delivery in the active turn. Queued messages execute in acceptance order after current work ends, unless the caller stops the queue.
+While the agent is working:
 
 ```console
-$ mytool continue c1 'Then add tests' --enqueue --background --json
-{"session_id":"c1","status":"queued","changed":true,"partial":false,"capabilities":{"steer_modes":["in-place","cancel-then-start"]}}
-$ mytool continue c1 'Then update the docs' --enqueue --background --json
-{"session_id":"c1","status":"queued","changed":true,"partial":false,"capabilities":{"steer_modes":["in-place","cancel-then-start"]}}
+$ mytool queue c1 'Then add tests' --json
+{"session_id":"c1","message_state":"accepted","changed":true,"partial":false,"capabilities":{"steer_mode": "in-place"},"queue":{"pending_messages":1,"stopped":false}}
+$ mytool queue c1 'Then update the docs' --json
+{"session_id":"c1","message_state":"accepted","changed":true,"partial":false,"capabilities":{"steer_mode": "in-place"},"queue":{"pending_messages":2,"stopped":false}}
 $ mytool status c1 --json
-{"session_id":"c1","status":"running","pending_messages":2,"capabilities":{"steer_modes":["in-place","cancel-then-start"]}}
+{"session_id":"c1","status":"running","queue":{"pending_messages":2,"stopped":false},"capabilities":{"steer_mode": "in-place"}}
 ```
 
-The queued messages request later work; they do not correct the active turn.
-`steer c1 'Use the existing helper' --steer-mode in-place` can still correct the active work.
-The same request with `--steer-mode cancel-then-start` fails with `conflict` before cancellation. Future work has already been accepted.
+The caller can still use `steer` to correct the current work without removing those two messages:
 
-A tool offering more detail could instead expose this queue read, with summaries in planned delivery order:
+```console
+$ mytool steer c1 'Check the expiry first' --json
+{"session_id":"c1","status":"running","changed":true,"partial":false,"capabilities":{"steer_mode":"in-place"},"correction_result":{"steer_mode":"in-place","target_status":"running","message_state":"accepted"},"queue":{"pending_messages":2,"stopped":false}}
+```
+
+The follow-up count remains two; it does not count the correction.
+An enqueue can report zero pending follow-ups if its message has already started execution.
+A tool offering more detail could expose this queue read.
+Here `preview` contains the first 200 characters of each message, or the whole text if shorter.
+Both messages fit, so neither preview is truncated:
 
 ```console
 $ mytool queue list c1 --json
@@ -2087,39 +2080,85 @@ $ mytool queue list c1 --json
 {
   "session_id": "c1",
   "items": [
-    {"summary": "Then add tests", "delivery": "follow-up"},
-    {"summary": "Then update the docs", "delivery": "follow-up"}
+    {"preview": "Then add tests", "truncated": false, "delivery": "follow-up"},
+    {"preview": "Then update the docs", "truncated": false, "delivery": "follow-up"}
   ],
   "has_more": false
 }
 ```
 
-The command and field names are choices of these tools.
-Neither form requires public turn or message identifiers.
+For a longer message, its item would contain `truncated: true` and an `output_file` such as `/home/user/.cache/mytool/queued-message.txt` holding that message's full text.
+
+**Example: stopping until tomorrow.** Continuing the queue example, assume cancellation finishes during the call:
+
+```console
+$ mytool cancel c1 --json
+{"session_id":"c1","status":"canceled","changed":true}
+$ mytool queue list c1 --json
+{"session_id":"c1","items":[{"preview":"Then add tests","truncated":false,"delivery":"follow-up"},{"preview":"Then update the docs","truncated":false,"delivery":"follow-up"}],"has_more":false}
+```
+
+The caller closes the laptop. Nothing starts automatically, even if another message is queued.
+The next day, with the session's recorded context still available:
+
+```console
+$ mytool continue c1 --background --json
+{"session_id":"c1","status":"running","changed":true,"partial":false,"capabilities":{"steer_mode":"in-place"},"queue":{"pending_messages":2,"stopped":false}}
+$ mytool wait c1
+```
+
+The accepted follow-up continues the unfinished work and re-enables the queue.
+After that work finishes, this tool automatically starts the queued tests, then the documentation task.
+No separate queue restart is needed.
+If the earlier work had already succeeded before cancellation, `continue c1` would start the queued tests directly.
+Each wait observes the work it selects under the call-target rules (V2), not the whole queue.
 
 ### V5: Waiting and context MUST preserve the conversation contract.
 
 **V5a:** Wait MUST return the retained answer when it observes a terminal turn and an answer is available, including a partial answer after failure.
-On timeout, wait MUST emit no result, even if a partial answer was recorded.
-Stdout is therefore empty.
-The timeout error still carries the public identifiers and last observed state under the wait-error rule (M1b).
 
-A shortened inline answer follows the preview-and-file rule (O5c); its text presentation identifies the complete result under the rendering-consistency rule (O3c).
+**Observation timeouts:** Wait and commands waiting for work they started follow these output rules when they fail with `kind` `timeout`:
+
+- By default, the command MUST emit no result, even if a partial answer was recorded. Stdout is empty.
+- The tool MAY offer an explicit choice to return an available partial answer on that timeout, using `partial: true` under the incomplete-result rule (O5a).
+
+Returning a fragment does not change the failure kind required by the wait or started-work rules (M1e, R7d), including `outcome_unknown` when required.
 
 Reading a retained answer MUST NOT consume it or switch to a later turn during that call.
 The tool MUST document its retention policies for answers and for context needed to continue the conversation. These policies can differ.
 
-**V5b:** **Applies when the tool can wait for a temporary limit and automatically continue.** That wait MUST remain non-terminal in the same turn.
+**Example: checking work after a wait timeout.**
+
+```console
+$ mytool wait c1 --timeout 30s
+```
+
+If work is still running at the deadline, stdout is empty and stderr reports `timeout`.
+The caller checks the current state:
+
+```console
+$ mytool status c1 --json
+{"session_id":"c1","status":"running","capabilities":{"steer_mode":"in-place"}}
+```
+
+Neither call starts new work or repeats an ever-growing answer fragment.
+
+**V5b:** **Applies when the tool knows a limit is blocking work.** Status MUST report:
+
+- The reason work cannot continue.
+- Whether automatic continuation is enabled.
+
+Field names are tool-defined.
 A reported reason or expected return time MUST come from observed information. Silence alone is not evidence.
+If the tool waits for a temporary limit and will automatically continue, that wait MUST remain non-terminal in the same turn.
 Permanent failure to continue ends the turn as `failed`.
 
-If the tool sends the prompt again, that is a request retry under the safe-retry rules (R6). It is not another observation of the existing turn.
-Cancellation includes scheduled automatic resumption under the cancellation rule (M2c); an observation timeout does not change the turn (M1e).
+Sending the prompt again is a request retry under the safe-retry rules (R6), not another observation of the turn.
 
 **Example: waiting for a rate limit to clear.** This session-only tool can observe the limit and uses domain-specific `waiting`, `reason`, and `auto_continue` fields in its status result:
 
 ```json
-{"session_id":"c1","status":"waiting","reason":"rate_limit","auto_continue":true,"capabilities":{"steer_modes":["cancel-then-start"]}}
+{"session_id":"c1","status":"waiting","reason":"rate_limit","auto_continue":true,"capabilities":{"steer_mode": "cancel-then-start"}}
 ```
 
 The caller runs `mytool wait c1 --timeout 30s` in a non-interactive context with non-TTY stderr.
@@ -2132,9 +2171,27 @@ If the turn still waits for the limit when that deadline expires, the command ex
 When work resumes, it continues in the same turn.
 The caller does not send a new prompt merely to resume waiting.
 
-**V5c:** **Applies when a follow-up or correction requires restoring context.** The tool MUST document the conditions under which restoration is available.
-If the tool cannot restore that context, it MUST fail instead of silently using a new conversation or an incomplete reconstruction.
+**V5c:** The tool MUST support reopening a retained session after the initiating process exits or restarts, subject to its documented context-retention policy (V5a).
+Reopening a session does not by itself start work or prove that previous work ended.
+Loss of a connection MUST NOT by itself be reported as cancellation or be treated as a reason to start the same work again.
+
+**Applies when a follow-up or correction needs restored context:**
+The tool MUST document the conditions needed for restoration.
+If required context cannot be restored, it MUST fail instead of silently using a new conversation or an incomplete reconstruction.
 A separately requested new conversation based on retained history MAY be offered without claiming identical context.
+
+**Example: continuing stopped work after reopening the tool.** This session's recorded context remains available.
+The caller previously stopped the work with `mytool cancel c1`, then closed the laptop.
+After reopening the tool, status confirms `canceled`:
+
+```console
+$ mytool continue c1 --background
+```
+
+No new message is required. The new turn continues the unfinished task using the retained instruction, conversation, and recorded progress.
+It does not recreate the old process or undo files already changed.
+Accepting this follow-up also re-enables a stopped queue; queued messages run after the follow-up under the documented execution policy (V4d).
+After a network interruption, the caller checks status first: work might still be running.
 
 **V5d:** **Applies when a turn needs caller input or permission to proceed.** Requests follow the late-input rule (I5d).
 Denying a tool action can still let the agent continue.
@@ -2143,22 +2200,22 @@ A question in a completed answer uses a normal follow-up instead.
 
 ### V6: Answers MUST remain readable as documents.
 
-**V6a:** The conversation-start, follow-up, correction, and wait roles MUST be *document commands*.
+**V6a:** The conversation-start, follow-up, correction, and wait roles MUST provide *document commands* for non-interactive use.
 On non-TTY stdout, they MUST default to the `text` presentation below. This applies whether the call returns an answer or only a receipt.
-Status defaults to JSON on non-TTY stdout under the general format-selection rule (O2c).
-Explicit JSON still returns the same result data, with the original answer string rather than the text wrapper.
+Status, queue receipts, and queue reads follow the general format-selection rule (O2c).
+Queue restart uses the follow-up presentation when it accepts a turn for execution.
+Explicit JSON returns the original answer string rather than the text wrapper and can include more metadata under the text-selection rule (V6c).
 
 Help MUST describe `--json` as a choice for programmatic parsing, not as a prerequisite for an agent to read an answer.
 An answer-reading breadcrumb SHOULD use the default presentation unless the workflow needs programmatic parsing.
-Command detail still describes result emission and defaults under the output-contract rules (O2a, O4d, O5a).
 
 **V6b:** The tool, not the responding agent, MUST build the text wrapper:
 
 **Layout:**
 
 - The `<result>` opening tag carries the session identifier and `status` as double-quoted attributes. Their attribute names are the JSON field names.
-- If the result contains a turn identifier, the opening tag also carries it as an attribute with its JSON field name. If the JSON contract requires `partial`, the tag includes it as `true` or `false`.
-- Any remaining result fields MUST appear as one JSON object in `<metadata>`. This excludes fields already shown as attributes and the answer field.
+- If the JSON contract requires `partial`, the opening tag MUST include the same boolean value as JSON.
+- Fields selected for text metadata under the selection rule (V6c) MUST appear as one JSON object in `<metadata>`. Fields already shown as attributes and the answer field are excluded. With no selected fields, this section can be omitted.
 - An available answer MUST appear in `<answer>`, preserving its line breaks and Markdown except for the escaping below. With no answer, omit the section; do not invent an empty answer.
 - Each section's opening and closing tags and the closing `</result>` MUST occupy their own lines. Add a separating newline before a closing tag if needed. That newline is not part of the answer.
 
@@ -2172,17 +2229,24 @@ Attribute names MUST start with an ASCII letter or underscore and contain only A
 
 For example, `</answer>` and `<answer/>` display as `&lt;/answer>` and `&lt;answer/>`.
 Delimiter escaping does not change `<answers>`, `<Answer>`, or `a < b`.
-This is a human-readable presentation with tags. It is not strict XML or a format for lossless text parsing.
-The tags organize content. They do not make an agent's answer trusted instructions.
+Escaping keeps answer or metadata content from looking like a section boundary to a human or model reader.
+This is a readable presentation with tags, not strict XML. Use JSON to recover the original answer text programmatically.
+The tags do not make an agent's answer trusted instructions.
 
-**V6c:** Text metadata MUST preserve the result's completeness signal from JSON (O5a), including `partial: false` for a complete receipt and `partial: true` for an unfinished answer returned on failure.
+**V6c:** The text presentation MUST retain these details when present in the JSON result:
 
-Tool activity records, reasoning traces, and the full transcript MUST NOT be included automatically in the default result, including metadata.
-An explicit read or selection can expose those records. Choosing a format such as `--json` does not request them.
+- The session-capability object, `correction_result`, and `next`.
+- Reported permission denials or policy changes, and recovery warnings.
+- Reported limit-related waiting reasons and whether automatic continuation is enabled.
+- Result-preview notices and information for retrieving the complete result.
+
+Other JSON fields MAY be omitted from text when this preserves the result's meaning under the rendering-consistency rule (O3c).
+Command detail MUST document the selection of text metadata.
+For example, a tool can keep cost and timing fields only in JSON.
+
+Tool activity records, reasoning traces, and the full transcript MUST NOT be included automatically in the default result of any format, including metadata.
+They require an explicit read or selection; `--json` selects only the format.
 Concise status, usage, permission, and recovery metadata can accompany the answer.
-
-For both text and JSON, result metadata belongs with the result. Errors and progress remain diagnostics (O3a).
-Destination-file behavior still applies to the entire result (O2e).
 
 **Example: reading an answer and asking a follow-up.** Continuing the start example, `mytool wait c1` returns this stdout with exit `0`:
 
@@ -2209,7 +2273,6 @@ if credentials.expires_at <= now:
 ````
 
 The table and code remain readable without decoding a JSON string.
-A tool that exposes turn identifiers includes that field as another attribute.
 Calling the same wait with `--json` returns an object with `session_id`, `status`, `partial`, and the original Markdown in `answer`. Reading it does not rerun the agent.
 
 The caller can now ask a follow-up using the same conversation:
@@ -2218,12 +2281,12 @@ The caller can now ask a follow-up using the same conversation:
 $ mytool continue c1 'Explain how to test the expiry check' --background
 ```
 
-The text receipt has no answer section because the new answer is not ready:
+This tool's text receipt omits `changed`, which remains in its JSON result, and has no answer section because the new answer is not ready:
 
 ```text
 <result session_id="c1" status="running" partial="false">
 <metadata>
-{"changed":true,"capabilities":{"steer_modes":["cancel-then-start"]},"next":["mytool","wait","c1"]}
+{"capabilities":{"steer_mode": "cancel-then-start"},"next":["mytool","wait","c1"]}
 </metadata>
 </result>
 ```
@@ -2247,4 +2310,4 @@ With non-TTY stderr, the last non-empty stderr line is:
 {"error":{"kind":"operation_failed","message":"The work failed before finishing its answer.","context":{"session_id":"c2","status":"failed"}}}
 ```
 
-This differs from an observation timeout: the turn has ended, so its available answer is returned with an explicit completeness signal.
+Unlike the default observation-timeout result, this returns the available answer because the turn has ended. The completeness signal still describes the answer.

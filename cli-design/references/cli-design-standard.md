@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.2.0-draft.8
+**Version:** 0.2.0-draft.9
 
 ## Scope
 
@@ -204,7 +204,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.8", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.9", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -274,7 +274,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.8", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.9", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -1333,7 +1333,7 @@ The index still lists every command the tool dispatches, and each listed command
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.2.0-draft.8",
+    "standard": "0.2.0-draft.9",
     "extensions": [],
     "scope": ["services"]
   }
@@ -1754,7 +1754,7 @@ $ mytool run worker 'Explain why login fails' --background --json
   "status": "running",
   "changed": true,
   "partial": false,
-  "capabilities": {"steer_mode": "cancel-then-start"},
+  "capabilities": {"steer_mode": "cancel-then-start", "continue_without_message": true},
   "next": ["mytool", "wait", "c1"]
 }
 ```
@@ -1772,6 +1772,9 @@ The default is `in-place` when supported for the session's configuration, otherw
 A correction without an explicit mode choice MUST use that declared mode.
 A busy turn or temporary backend failure does not change the declared mode.
 
+The object SHOULD also contain `continue_without_message`: a boolean stating whether the follow-up role accepts a request without a message (V1a).
+Like `steer_mode`, the name is defined only within the session-capability object.
+
 Command detail MUST document the default correction behavior.
 Receipts and status report the session's mode; they do not require the caller to choose one.
 
@@ -1786,7 +1789,7 @@ $ mytool status c1
 {
   "session_id": "c1",
   "status": "succeeded",
-  "capabilities": {"steer_mode": "in-place"}
+  "capabilities": {"steer_mode": "in-place", "continue_without_message": true}
 }
 ```
 
@@ -1804,7 +1807,8 @@ When the caller addresses the session, the tool MUST select work as follows:
 | Correction | The active turn. With none active, fail with `kind` `conflict`. |
 | Pause or resume, when supported | The same selection as status or wait; suspension behavior follows M3. |
 
-An unknown or expired session, or a status, wait, cancellation, pause, or resume call with no work to select, MUST fail with `kind` `not_found` under the identifier rule (M1d).
+An unknown or expired session MUST fail with `kind` `not_found` for every role under the identifier rule (M1d).
+A status, wait, cancellation, pause, or resume call with no work to select MUST fail the same way.
 A `null` status in a wait error means no state was observed (M1b).
 
 **V2b:** Cancellation and correction MUST keep their selected work until the call ends. Status and wait follow the changing-selector rule (M1g).
@@ -1821,10 +1825,11 @@ If `cancel c1` selects work that finishes just before cancellation takes effect,
 It does not cancel a newer turn or claim that the selected work was canceled.
 
 **V2c:** A direct follow-up MUST fail with `kind` `conflict` while work remains non-terminal.
+The error's `hint` SHOULD name the correction role and, when the tool offers a queue, the queue role as the alternatives.
 
 **Example: choosing when a message applies.** While the agent works on login, a caller can use `steer c1 'Check the expiry first'` to correct that work.
 A tool with a follow-up queue can accept `queue c1 'Then add tests'` for later.
-`continue c1 'Then add tests'` fails with `conflict` while work is still running.
+`continue c1 'Then add tests'` fails with `conflict` while work is still running; its `hint` points to `steer c1` for the running work and `queue c1` for later.
 
 ### V3: Correction MUST report what was accepted or delivered.
 
@@ -1861,6 +1866,7 @@ The enclosing result or error `context` identifies the session under the session
 On success, the outer `status` describes the turn to observe next. This is the selected turn for in-place, or the accepted new turn for cancel-then-start.
 `target_status` always describes the originally selected turn.
 If correction fails after selecting its target, the error's `context` MUST include `correction_result` with the last known facts.
+A correction that fails before selecting a target, such as with no active turn (V2a), does not require `correction_result`.
 
 **Acceptance and delivery:**
 For in-place, the instruction is intended for the selected turn. For cancel-then-start, it is intended for the new turn.
@@ -1949,6 +1955,7 @@ Its `context` includes `session_id` and `correction_result`.
 | The deadline expired after requesting cancel; a read still shows the selected work running. No new instruction was sent. | `timeout` | `running` | `not_delivered` |
 | Cancel was requested, but its effect could not be observed. No new instruction was sent. | `outcome_unknown` | Last observed state or `null` | `not_delivered` |
 | The next prompt may have been accepted, but its receipt was lost. | `outcome_unknown` | Last observed state or `null` | `unknown` |
+| Another call started different work after the selected work ended and before the correction could proceed. | `conflict` | Its terminal state, such as `canceled` | `not_delivered` |
 
 The first row produces this error:
 
@@ -1993,6 +2000,7 @@ The read MUST use a list or at least a non-negative integer count.
 The tool MUST document what the list or count includes.
 
 If the tool cannot determine whether forwarded corrections are still pending in the system running the agent, it MUST document that limitation and MUST NOT report the unknown state as zero pending corrections.
+The read MUST then report that state explicitly rather than omit it, for example with `null` in place of the count or with a documented field, and the command's `output_description` MUST name that representation.
 
 The read can be part of status or a separate command. A list follows the bounded-collection rules (O6).
 When the read returns a list, each item SHOULD include a preview of the message's text; shortened message text follows the bounded-value rules (O5c), and the `truncated` and `output_file` fields belong to the same list item as its preview.
@@ -2105,6 +2113,7 @@ A question in a completed answer uses a normal follow-up instead.
 | Wait for work | `wait` |
 
 On non-TTY stdout, these commands MUST default to the tagged `text` presentation below.
+When this differs from the tool-wide `format_defaults`, each of these commands declares its own `format_defaults` in its command detail (O2a).
 This applies to both answers and acceptance receipts; a receipt with no answer omits the `<answer>` section.
 Status and cancellation follow the general format-selection rule (O2c), normally JSON on non-TTY stdout.
 Explicit JSON returns the original answer string rather than the text wrapper and can include more metadata under the text-selection rule (V6c).
@@ -2231,7 +2240,7 @@ The tool MUST provide the pending-message read (V4c) for the queue, wherever mes
 **V7b:** A successful enqueue MUST return the session identifier and `message_state: accepted` in its structured receipt.
 This confirms responsibility for the message, not acceptance or completion of a turn. The receipt MUST NOT use a turn's `status` to describe a queued message.
 
-Correction and enqueue replies SHOULD include the pending-message count and whether automatic execution is stopped, when these facts can be determined.
+Correction, enqueue, and follow-up replies SHOULD include the pending-message count and whether automatic execution is stopped, when these facts can be determined.
 This applies to text and structured replies; on failure, the information belongs in the error's `context`.
 Enqueue and queue reads follow the general format-selection rule (O2c), normally JSON on non-TTY stdout.
 A separate restart command uses the tagged text presentation for answers (V6a) when it accepts a turn for execution.
@@ -2258,6 +2267,7 @@ The tool MUST handle stopping and restarting as follows:
 | The correction request fails after cancellation was requested | Stays stopped until the caller explicitly restarts | Preserved |
 | A direct follow-up, with or without a message, not yet confirmed as accepted | Stays stopped | Preserved |
 | That follow-up accepted | Re-enabled; queued messages run after the follow-up ends, under the documented policy | Preserved |
+| A direct follow-up rejected with `kind` `conflict` (V2c, this rule) | Unchanged | Unchanged |
 | A restart requested while work is active | Fails with `kind` `conflict` | Unchanged |
 | A no-message follow-up after the previous work succeeded, with pending messages | Starts the next queued message directly | The first message starts |
 
@@ -2291,7 +2301,7 @@ Here `preview` holds each message's text, shortened under the bounded-value rule
 Both messages fit, so neither preview is truncated:
 
 ```console
-$ mytool queue list c1 --json
+$ mytool pending c1 --json
 ```
 
 ```json
@@ -2312,7 +2322,7 @@ For a longer message, its item would contain `truncated: true` and an `output_fi
 ```console
 $ mytool cancel c1 --json
 {"session_id":"c1","status":"canceled","changed":true}
-$ mytool queue list c1 --json
+$ mytool pending c1 --json
 {"session_id":"c1","items":[{"preview":"Then add tests","truncated":false,"delivery":"follow-up"},{"preview":"Then update the docs","truncated":false,"delivery":"follow-up"}],"has_more":false}
 ```
 

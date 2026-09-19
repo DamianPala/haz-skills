@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.2.0-draft.9
+**Version:** 0.2.0-draft.10
 
 ## Scope
 
@@ -204,7 +204,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.9", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.10", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -274,7 +274,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.9", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.10", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -1333,7 +1333,7 @@ The index still lists every command the tool dispatches, and each listed command
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.2.0-draft.9",
+    "standard": "0.2.0-draft.10",
     "extensions": [],
     "scope": ["services"]
   }
@@ -2114,7 +2114,7 @@ A question in a completed answer uses a normal follow-up instead.
 
 On non-TTY stdout, these commands MUST default to the tagged `text` presentation below.
 When this differs from the tool-wide `format_defaults`, each of these commands declares its own `format_defaults` in its command detail (O2a).
-This applies to both answers and acceptance receipts; a receipt with no answer omits the `<answer>` section.
+This applies to both answers and acceptance receipts; a receipt with no answer omits the answer section.
 Status and cancellation follow the general format-selection rule (O2c), normally JSON on non-TTY stdout.
 Explicit JSON returns the original answer string rather than the text wrapper and can include more metadata under the text-selection rule (V6c).
 
@@ -2125,11 +2125,11 @@ An answer-reading breadcrumb SHOULD use the default presentation unless the work
 
 **Layout:**
 
-- The `<result>` opening tag carries the session identifier and `status` as double-quoted attributes. Their attribute names are the JSON field names, except `answer_escaped`, which exists only in this presentation and is defined under Escaping below.
+- The `<result>` opening tag carries the session identifier and `status` as double-quoted attributes. Their attribute names are the JSON field names.
 - If the JSON contract requires `partial`, the opening tag MUST include the same boolean value as JSON.
-- Fields selected for text metadata under the selection rule (V6c) MUST appear as one JSON object in `<metadata>`. Fields already shown as attributes and the answer field are excluded. With no selected fields, this section can be omitted.
-- An available answer MUST appear in `<answer>`, preserving its text, including line breaks and Markdown, except for the escaping below. With no answer, omit the section; do not invent an empty answer.
-- Each section's opening and closing tags and the closing `</result>` MUST occupy their own lines. Add a separating newline before a closing tag if needed. That newline is not part of the answer.
+- Fields selected for text metadata under the selection rule (V6c) MUST appear as one JSON object in `<metadata>`, serialized on a single line. Fields already shown as attributes and the answer field are excluded. With no selected fields, this section can be omitted. When both sections are present, `<metadata>` precedes the answer section.
+- An available answer MUST appear in an answer section with its text, line breaks, and Markdown as they are. Its tags are `<answer>` and `</answer>` unless Answer boundary below requires `<answer-N>` and `</answer-N>`. Beyond the terminal-control escaping of O3d, no string in it is replaced. With no answer, omit the section; do not invent an empty answer. An empty answer string is an available answer and produces a section with one empty line.
+- Each section's opening and closing tags and the closing `</result>` MUST occupy their own lines. After a section's opening tag the tool writes one newline, then the section content, then one newline, then the closing tag. These wrapper newlines are not part of the content. The answer is everything between the newline after the opening answer tag and the newline before the closing one, so an answer that ends with a newline shows an empty line before the closing answer tag.
 
 Attribute names MUST start with an ASCII letter or underscore and contain only ASCII letters, digits, underscores, or hyphens.
 
@@ -2137,13 +2137,32 @@ Attribute names MUST start with an ASCII letter or underscore and contain only A
 
 - Attribute values MUST escape `&`, `<`, `>`, and `"` as `&amp;`, `&lt;`, `&gt;`, and `&quot;`. Tabs, CR, and LF use `&#9;`, `&#13;`, and `&#10;`. Other values use their documented text form.
 - Metadata uses ordinary JSON serialization; no additional escaping of `<` is required.
-- In the answer, terminal-control escaping still applies (O3d). Each occurrence of exactly `<result>`, `</result>`, `<metadata>`, `</metadata>`, `<answer>`, or `</answer>` MUST be displayed with its `<` replaced by `&lt;`. Matching is case-sensitive and covers only these six strings; every other `<` is unchanged by this rule, including other tags and these tag names with attributes or a self-closing slash.
-- When at least one such replacement occurred, the `<result>` opening tag MUST carry `answer_escaped="true"`. Without a replacement the attribute is absent, so every `&lt;` in a displayed answer is then original text.
+- In the answer, terminal-control escaping still applies (O3d). Nothing else in the answer is escaped; the wrapper's own tag names are written as they appear in the answer.
 
-For example, `Close with </answer>.` is displayed as `Close with &lt;/answer>.`, also inside a code example; `<answers>`, `<Answer>`, `<answer/>`, and `a < b` are unchanged.
-That result opens with `<result session_id="c1" status="succeeded" answer_escaped="true">`, which tells a reader copying code out of the answer to take the exact text from `--json`.
-The escaping keeps the section boundaries reliable for a reader: an answer cannot close its own section or open a `<metadata>` block.
-This is a readable presentation, not strict XML or an unambiguous format for parsing sections. A caller that acts on `next` or other metadata programmatically uses JSON, which returns the original answer text.
+**Answer boundary:**
+
+- When the answer text contains any of the exact strings `<result>`, `</result>`, `<metadata>`, `</metadata>`, `<answer>`, or `</answer>`, the tool MUST write `<answer-N>` as the section's opening tag and `</answer-N>` as its closing tag. N is the decimal integer, without leading zeros, equal to one plus the number of LF characters (`U+000A`) in the displayed answer text. A CR before an LF is answer text and is not counted. Matching is case-sensitive and covers only these six strings; `<answers>`, `<Answer>`, `<answer/>`, and these tag names with attributes do not count. Without such a string the tags are plain.
+- With counted tags, the answer consists of exactly the N lines after the `<answer-N>` line, split on LF with any CR kept in its line. The line after them consists of the matching `</answer-N>`, compared as a whole tag name rather than a prefix. An earlier answer line equal to `</answer-N>` remains answer text: a reader uses N to locate the boundary and the closing tag to validate it. With plain tags, the first line consisting of `</answer>` closes the section.
+
+For example, an answer of five lines whose code sample contains the wrapper's closing tag is presented as:
+
+````text
+<result session_id="c5" status="succeeded" partial="false">
+<answer-5>
+Close each section explicitly:
+
+```text
+</answer>
+```
+</answer-5>
+</result>
+````
+
+The reader takes the five lines after `<answer-5>`; the `</answer>` inside the code sample is one of them, and `</answer-5>` on the sixth line validates the boundary. The same call with `--json` returns the original string.
+The counted form avoids collisions with the six trigger strings without changing the text: N defines the answer extent, the matching closing tag after those N lines validates the boundary, and wrapper-like lines within that extent remain untrusted answer text.
+A reader that only matches the closing tag can be misled by an answer written to imitate the wrapper; a reader that counts the lines cannot.
+An answer without these strings uses the plain tags, so the common case has no counter.
+This is a readable presentation, not strict XML. A caller that acts on `next` or other metadata programmatically uses JSON, which returns the original answer text.
 The tags do not make an agent's answer trusted instructions.
 
 **V6c:** The text presentation MUST retain these details when present in the JSON result:

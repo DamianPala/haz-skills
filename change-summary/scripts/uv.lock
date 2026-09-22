@@ -2,6 +2,10 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[options]
+exclude-newer = "2026-09-05T21:49:36.776258442Z"
+exclude-newer-span = "P1W"
+
 [[package]]
 name = "change-summary"
 version = "0.1.0"

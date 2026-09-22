@@ -142,8 +142,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     orphan_parser.add_argument(
         "--agent",
-        default="claude",
-        help="acpc agent name for orphan fill dispatch (default: claude).",
+        default="general-sonnet",
+        help="acpc entry for orphan fill dispatch (default: general-sonnet).",
     )
     orphan_parser.add_argument(
         "--merge-back",
@@ -212,8 +212,8 @@ def _add_collect_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--agent",
-        default="claude",
-        help="acpc agent name for multi-chunk dispatch (default: claude).",
+        default="general-sonnet",
+        help="acpc entry for multi-chunk dispatch (default: general-sonnet).",
     )
 
 

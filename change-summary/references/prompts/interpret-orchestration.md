@@ -5,13 +5,17 @@ The diff has been split into {chunk_count} chunks. Per-chunk interpretation prom
 
 ## Dispatch
 
-For each chunk prompt file, run in the background:
+For each chunk prompt file, dispatch a background acpc session from the repository root:
 
 ```bash
-acpc prompt {agent} --input-file <prompt-file> --model standard --permissions write --quiet &
+acpc run {agent} --prompt-file <prompt-file> --permissions execute --bg --quiet
 ```
 
-Launch ALL chunks in parallel. Then `wait` for all to complete.
+Each call prints the session id. Launch ALL chunks first, then wait for every id:
+
+```bash
+acpc wait <session-id> --timeout 1800
+```
 
 Do NOT process chunks yourself. Do NOT read the chunk data files directly.
 

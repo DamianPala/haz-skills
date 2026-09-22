@@ -121,7 +121,7 @@ def _build_orphan_fill_rules(output_path: str) -> str:
 def write_orphan_prompts(
     workdir: Path,
     orphans: dict[int, list[str]],
-    agent: str = "claude",
+    agent: str = "general-sonnet",
 ) -> None:
     """Write orphan fill prompts for chunks with orphan files."""
     chunk_prompt_paths: list[str] = []
@@ -149,18 +149,17 @@ def write_orphan_prompts(
         return
 
     # Write orchestration prompt
-    dispatch_lines = []
-    for prompt_path in chunk_prompt_paths:
-        dispatch_lines.append(
-            f"acpc prompt {agent} --input-file {prompt_path} "
-            f"--model standard --permissions write --quiet"
-        )
+    dispatch_lines = [
+        f"acpc run {agent} --prompt-file {prompt_path} --permissions execute --bg --quiet"
+        for prompt_path in chunk_prompt_paths
+    ]
 
     orchestration = (
         f"## Orphan fill: {len(chunk_prompt_paths)} chunk(s) with orphan files\n\n"
-        "Run each orphan fill prompt:\n\n"
-        "```bash\n" + "\n".join(f"{line} &" for line in dispatch_lines) + "\n```\n\n"
-        "Launch all in parallel, then `wait` for completion.\n\n"
+        "Dispatch each orphan fill prompt from the repository root:\n\n"
+        "```bash\n" + "\n".join(dispatch_lines) + "\n```\n\n"
+        "Each call prints the session id. Launch all first, then wait for every id with "
+        "`acpc wait <session-id> --timeout 1800`.\n\n"
         "After completion, verify outputs:\n\n"
         "```bash\n"
         f"ls -lh {workdir}/orphan-changes-chunk-*.yaml\n"
@@ -201,7 +200,7 @@ def write_prompts(
     range_str: str,
     project_name: str | None = None,
     project_description: str | None = None,
-    agent: str = "claude",
+    agent: str = "general-sonnet",
 ) -> None:
     """Write all agent prompts to workdir."""
     out = Path(workdir)

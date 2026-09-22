@@ -72,7 +72,7 @@ Token budget: 100k per chunk. If a single file exceeds the budget, it gets its o
 | `--author "Name"` | Filter commits by author |
 | `--output dir` | Output directory (always use) |
 | `--max-tokens N` | Token budget per chunk (default: 100000) |
-| `--agent NAME` | acpc agent for dispatch. Use the same agent platform you're running on |
+| `--agent NAME` | acpc entry for dispatch (default: `general-sonnet`). Pick an entry with at least `execute` permissions, on the same agent platform you're running on |
 
 If base ref is not provided, the script auto-detects from the latest tag. If no tags exist, analyzes the entire history.
 

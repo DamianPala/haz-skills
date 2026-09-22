@@ -17,6 +17,7 @@ description: "Create and update Pull Requests with structured descriptions from 
 - Focus on intent and impact, not obvious code changes
 - Specific test plans (`pytest -k test_auth`) not generic ("run the tests")
 - Trivial changes get trivial descriptions, not 3 paragraphs
+- Voice: the PR is written by the author, a single person. Impersonal where possible ("the walk is bounded", "measured on Kubuntu 25.10"); first person singular ("I caught it") where a person must appear. Never "we"/"our"/"us": there is no team behind the PR, and agents that helped are not co-authors
 - Blocking prompt: find and use a user-prompting tool (AskUserQuestion, ask_user, prompt). Plain text only if none exists
 
 ## Platform detection

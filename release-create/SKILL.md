@@ -71,6 +71,8 @@ Run platform detection first (see section above). Then:
 
 4. `git log <base_tag>..HEAD --oneline` → zero commits = abort "Nothing to release since `<base_tag>`"
 
+5. If HEAD already carries a final tag made outside this skill (`git tag --points-at HEAD`) and that tag has no release page yet (`gh release view <tag>` / `glab release view <tag>` fails) → **page-only release**: the version is that tag, the base tag is the last final tag before it, Step 3 skips the version proposal, and 6c–6e are skipped. 6a–6b still run, so the CHANGELOG commit lands after the tag: the page's Full changelog link then points at the default branch (see `references/release-page.md`, closing line) and Step 7 tells the user it resolves once that commit is pushed. Tell the user this before Step 2 so they can choose to re-tag instead
+
 ### Step 2: Analyze changes (via change-summary)
 
 Invoke change-summary as sub-skill (runs in the current working directory set in Step 1a):
@@ -142,9 +144,23 @@ Verify internally, do not output. Every answer must be "yes":
 8. Empty categories omitted?
 9. Compare link format planned for Step 6 matches platform (GitHub vs GitLab) and tag convention?
 10. PR/MR references present on every entry that has one, deduplicated and ascending, none invented?
-11. Release page: breaking changes in the top block and nowhere else except the collapsed full list? Highlights present exactly when the release is first or large, the collapsed full list exactly when large (per `references/release-page.md`)? `All N changes` equals the entry count? Every item keeps its entries' PR/MR links? Install only for a package the registry knows?
+11. Release page: introduction first, then the breaking block, and the introduction says what changes for the reader rather than naming a standard or a ticket? Breaking changes in the block and nowhere else except the collapsed full list, one one-line sentence each, with rename inventories left to the migration document? Highlights present exactly when the release is first or large, at most 12 one-line items, the collapsed full list exactly when large (per `references/release-page.md`)? `All N changes` equals the entry count? Every item keeps its entries' PR/MR links? Install only for a package the registry knows?
 
 If any "no", fix before proceeding.
+
+### Step 4b: Fresh-eye review of the release page
+
+The author of the notes has read every diff and no longer sees the page the way a reader landing on it does: an alert block that grew into a wall, Highlights that became a second list, an introduction that names a standard instead of a change. One review from a context that has seen none of that catches this at a fraction of the run's cost (the change-summary agents read the whole diff; the reviewer reads a few kilobytes).
+
+Dispatch one subagent with a fresh context, whatever the runtime offers (a subagent tool, a background agent CLI); never review inline. Give it:
+
+- the release page markdown and the CHANGELOG section (the two Step 3 outputs, as files)
+- `changes.yaml` from Step 2, so it can check the page against the record
+- `<skill-dir>/references/release-page.md`, the rules the page claims to follow
+
+The brief asks for answers, not an opinion. The reviewer reads the page top to bottom once, then, from the introduction and the breaking block alone, writes in its own words: what this release is and for whom; what a reader must do before upgrading; the three things it remembers. Then it checks the whole page against the rules file and against `changes.yaml`: nothing on the page that the record does not support, no high-impact entry of the record missing from the page, every rule of the shape kept. Output: either the single word `pass`, or at most five findings ordered by impact, each quoting the line and giving the replacement wording. Generic advice ("could be shorter", "looks good overall") is not a finding. One round, no loop.
+
+Apply the findings you accept, rerun the Step 4 checklist on what changed, and carry the review into Step 5: what the user sees is the reviewed page. A finding you reject is mentioned there in one line with the reason. Skip this step only when the page has three items or fewer.
 
 ### Step 5: Present for review
 

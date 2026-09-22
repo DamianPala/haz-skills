@@ -12,7 +12,7 @@ description: "Generate Conventional Commit messages from staged changes. Analyze
 - Respect repo's commitlint/husky rules and AGENTS.md commit mode settings
 - One logical change per commit
 - WHY not WHAT ("support new auth provider" not "add import X"). No generic messages, no hallucinated changes
-- Confirmation: find and use a user-prompting tool (AskUserQuestion, ask_user, prompt). Plain text only if none exists
+- Confirmation: plain text only — end the turn with the message and the question, user answers in chat. Do NOT use interactive prompt tools (AskUserQuestion, ask_user): their UI can cover the preceding turn text, so the user confirms without seeing the message
 
 ## Modes
 
@@ -64,8 +64,10 @@ From `git diff --cached`, determine:
 
 **Autonomous mode:** Skip to Step 5.
 
-**Single:** First, output staged files and the full commit message as readable text (markdown code block for the message). Then ask "Commit?" with the confirmation tool (yes/edit/cancel). Do NOT embed the commit message inside the confirmation tool options — print it as text first so the user can read it.
-**Batch:** First, output the full plan with files per commit and each commit message as readable text. Then ask "Execute all?" with the confirmation tool (yes/edit/cancel).
+**Single:** Output staged files and the full commit message as readable text (markdown code block for the message), then END THE TURN with the plain-text question "Commit? (yes / edit / cancel)" — no tool calls after the text. Wait for the user's chat reply.
+**Batch:** Output the full plan with files per commit and each commit message as readable text, then end the turn with "Execute all? (yes / edit / cancel)". Wait for the chat reply.
+
+Never use an interactive prompt tool for this confirmation: its UI can hide the preceding text and the user would confirm blind.
 
 If **edit**: write to a temp file (e.g., `tempfile.gettempdir() + '/commit-message.md'`), tell user path, wait for confirmation, read back and validate CC format.
 
@@ -83,7 +85,7 @@ Commit body follows git convention: explain the motivation and impact of the cha
 
 ## Constraints
 
-- **Show before asking.** Always print staged files and the full commit message as readable text BEFORE showing the confirmation prompt. Never embed the message inside tool options.
+- **Show, then ask in plain text.** Always print staged files and the full commit message as readable text, then end the turn with the confirmation question. Never use interactive prompt tools for this confirmation.
 - **Ground every claim in the diff.** Re-read `git diff --cached` before finalizing. Every change in the message must map to actual diff lines.
 - **No destructive operations.** Never `--no-verify`, never force push, never amend pushed commits, never `git add -A` or `git add .`.
 - **No secrets, no AI trailers.** Never commit tokens/credentials. Never add Co-Authored-By or AI attribution.

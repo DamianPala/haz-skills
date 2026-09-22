@@ -22,8 +22,8 @@ Run `scripts/detect-platform.py` from the skill directory. Returns JSON:
 ```json
 {"platform": "github"|"gitlab", "host": "...", "project": "owner/repo", "commands": {...}}
 ```
-- Exit non-zero: no platform detected. Skip release page creation, still create tag
-- Exit zero, no `commands`: host known but CLI not installed (check `note` field). Pass `--host` to change-summary but skip release page creation
+- Exit non-zero: no platform detected. Skip 6f (nothing to publish the release page to), still create tag. The page markdown is still generated and shown, the user can paste it by hand
+- Exit zero, no `commands`: host known but CLI not installed (check `note` field). Pass `--host` to change-summary but skip 6f
 - Exit zero, `commands` present: full platform support. `project` field gives owner/repo for compare links
 
 ## Workflow
@@ -82,7 +82,7 @@ Args: "Analyze changes between <base_tag> and HEAD. --platform <gh|glab> --host 
 
 `<base_tag>` is the tag resolved in Step 1. For first release (no tags), omit `<base_tag>` entirely (change-summary auto-detects full history). Map platform detection output: `github` → `gh`, `gitlab` → `glab`. Omit `--platform` and `--host` if platform detection failed.
 
-Returns YAML with `changes[]` and metadata. Fields this skill consumes: `category` (KaC-ready: Added/Changed/Fixed/etc.), `description` (user-facing text), `detail` (technical specifics, for developer-facing audience), `breaking` + `migration` (for BREAKING prefix and migration notes), `suggested bump` (major/minor/patch).
+Returns YAML with `changes[]` and metadata. Fields this skill consumes: `category` (KaC-ready: Added/Changed/Fixed/etc.), `description` (user-facing text), `detail` (technical specifics, for developer-facing audience), `breaking` + `migration` (for BREAKING prefix and migration notes), `commits` (hashes behind each change, for PR/MR references), `suggested bump` (major/minor/patch).
 
 **Fallback** (change-summary unavailable): parse commits inline. Skip merge commits and version-bump commits. Map: `feat:`/`[FEAT]` → Added, `fix:`/`[FIX]` → Fixed, `refactor:`/`perf:`/`[IMP]` → Changed, `revert:` → Removed, `deprecated:` → Deprecated, `security:` → Security, `chore:`/`ci:`/`[DEV]` → skip. `!` or `BREAKING CHANGE` → breaking. Unrecognized → ask user. Note: fallback produces raw commit descriptions, not `description`/`detail` fields. Step 3 field selection doesn't apply, write entries directly from commit messages.
 
@@ -115,11 +115,18 @@ change-summary returns ALL change types including internal ones. Filter before g
 
 Group included changes by category in fixed order: Added → Changed → Deprecated → Removed → Fixed → Security. Skip empty categories.
 
+**First release:** the range is the whole history, so `fix:` and `refactor:` commits describe code nobody ever ran. A fix or change to something that never shipped is not a change for the reader: fold it into the Added entry it belongs to (omit it when no Added entry covers it), and keep Changed/Fixed only for behaviour a reader of an earlier public artifact (a README, a beta) could have relied on.
+
 **Field selection:** start from `description` (user-facing) or `detail` (developer-facing). If `description` is too vague or generic, enrich with context from `detail` so the reader understands what changed, but keep the language appropriate for the audience. Don't mechanically combine both fields every time.
+
+**References:** an entry ends with the links of the PRs/MRs behind its `commits`: `([#123](<url>))`, several as `([#123](…), [#124](…))`, numbers deduplicated and ascending. Number sources, in order: the commit subject (GitHub squash `(#N)` or `Merge pull request #N`; GitLab `(!N)` or `See merge request <project>!N`), then a platform lookup for commits that carry none (rebase merges, edited squash subjects): `gh api --hostname <host> repos/<project>/commits/<sha>/pulls` or `glab api projects/:fullpath/repository/commits/<sha>/merge_requests` (glab resolves host and path from the remote). URLs from platform detection: `<host>/<project>/pull/N` rendered `[#N]` on GitHub, `<host>/<project>/-/merge_requests/N` rendered `[!N]` on GitLab. No PR behind a commit → no reference at all; a bare commit hash is noise to the reader, and the compare link already covers it.
 
 **Breaking changes:** `**BREAKING:**` prefix inside Changed or Removed, with migration notes from change-summary. When multiple breaking changes exist, order by impact: data loss / end-user visible first, then API removals, then renames and signature changes.
 
-Step 6 handles formatting for each destination (CHANGELOG.md, tag message, release page) from this single output.
+This output is the CHANGELOG section. Two more shapes derive from it:
+
+- **Release page** (markdown for 6f): its own shape, defined in `<skill-dir>/references/release-page.md`. Read that file and generate the page now, so the user reviews it in Step 5
+- **Tag message** (plain text for 6c): mechanical stripping, done in Step 6
 
 ### Step 4: Verify (internal checklist)
 
@@ -134,18 +141,22 @@ Verify internally, do not output. Every answer must be "yes":
 7. Entries are readable and grouped (not raw field dumps)?
 8. Empty categories omitted?
 9. Compare link format planned for Step 6 matches platform (GitHub vs GitLab) and tag convention?
+10. PR/MR references present on every entry that has one, deduplicated and ascending, none invented?
+11. Release page: breaking changes in the top block and nowhere else except the collapsed full list? Highlights present exactly when the release is first or large, the collapsed full list exactly when large (per `references/release-page.md`)? `All N changes` equals the entry count? Every item keeps its entries' PR/MR links? Install only for a package the registry knows?
 
 If any "no", fix before proceeding.
 
 ### Step 5: Present for review
 
-Show: detected audience, proposed version (with bump reasoning), release notes, files to change.
+Show: detected audience, proposed version (with bump reasoning), the CHANGELOG section, the release page markdown (in a fenced block, so its shape is visible before anything is published), files to change.
 
 **Blocking prompt**: "Audience: `<detected>`. Release `<version>` on `<date>`? (y / edit / change-version / change-audience / cancel)"
 
-- **edit**: write notes to temp file, tell user path, wait for user to say they're done, read back
-- **change-version**: ask for new version, update headers
+- **edit**: write the CHANGELOG section and the release page to two temp files, tell user both paths, wait for user to say they're done, read back
+- **change-version**: ask for new version, update every place it appears: CHANGELOG header and compare link, release page install command, registry URL, compare and Full changelog URLs
 - **change-audience**: ask user for audience (developer-facing / user-facing), regenerate notes from Step 3 with new audience
+
+After any of the three: rerun Step 4 on both outputs and present them again with the same prompt. What gets published is what the user last saw.
 
 ### Step 6: Execute
 
@@ -154,7 +165,7 @@ Show: detected audience, proposed version (with bump reasoning), release notes, 
   - Prepend new version section (`## [X.Y.Z] - YYYY-MM-DD`) as first section after `# Changelog`
   - If `## [Unreleased]` exists: insert new version below it. If it has content → **blocking prompt**: "Unreleased section has entries. Merge into this release? (merge / keep separate)". After release, leave Unreleased empty and update its compare link to `<new_tag>...HEAD`
   - If `## [Unreleased]` is empty: insert below it, update its compare link to `<new_tag>...HEAD`
-- Exists, non-KaC format → **blocking prompt**: "CHANGELOG.md uses a different format. Overwrite with Keep a Changelog? (y / append / skip)"
+- Exists, non-KaC format → **blocking prompt**: "CHANGELOG.md uses a different format. Overwrite with Keep a Changelog? (y / append / skip)". On skip: drop the Full changelog link from the release page before 6f
 - Doesn't exist → create with KaC header (from reference template) + current release only. No backfilling from old tags (commit history quality is unknown)
 - Add/update compare links at bottom of file
 
@@ -166,7 +177,10 @@ Show: detected audience, proposed version (with bump reasoning), release notes, 
 ```
 git tag -a <version> -F <temp_notes_file>
 ```
-Write release notes to two temp files: (1) plain text for tag (strip `###` headers → `Added:`, strip `**BREAKING:**` → `BREAKING:`, strip link syntax, prefix with `Release <version>`), (2) markdown for release page in 6f.
+Write two temp files:
+
+1. **Plain text for the tag**, derived from the CHANGELOG section: strip `###` headers → `Added:`, strip `**BREAKING:**` → `BREAKING:`, strip link syntax, prefix with `Release <version>`
+2. **Markdown for the release page** (6f): the page reviewed in Step 5, shape per `references/release-page.md`
 
 **6d. Blocking prompt**: "Push tag and create release? (y / tag-only / cancel)"
 - **tag-only**: stop here, user pushes manually
@@ -177,7 +191,8 @@ Write release notes to two temp files: (1) plain text for tag (strip `###` heade
 
 **6f. Create release** (skip if platform detection failed or `commands` absent):
 - `platform` = github: `gh release create <version> --title "<version>" --notes-file <markdown_notes_file>` (add `--prerelease` for RC)
-- `platform` = gitlab: `glab release create <version> --notes-file <markdown_notes_file>` (add `--ref <branch>` if not default)
+- `platform` = gitlab: `glab release create <version> --name "<version>" --notes-file <markdown_notes_file>` (add `--ref <branch>` if not default)
+- Title is the bare version (`1.4.0`, or `v1.4.0` under the `v` convention), never `<product> <version>`: the repository name already sits above the release header and in the release list, so a product name in the title reads twice. Exception: a repository releasing several independently versioned packages, where the tag maps to exactly one of them and the title names it (`api 1.4.0`)
 - If CLI fails (404, permissions): try platform API fallback using `project_id`/`project` from platform detection. If API also fails, check for available MCP tools for the platform (e.g. `create_release`, `create_tag`). If all methods fail, output manual instructions
 
 ### Step 7: Post-release guidance
@@ -203,6 +218,8 @@ Changed:
 Fixed:
 - Connection pool exhaustion under concurrent batch requests
 ```
+
+Release page (markdown, for `--notes-file`; title `1.4.0`): the same release rendered per `references/release-page.md`, which holds a small-release and a large-release example.
 
 ## Constraints
 

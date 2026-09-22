@@ -17,10 +17,11 @@ Based on Keep a Changelog v1.1.0, adapted for automation workflows. Shared refer
 5. No other categories ("Breaking Changes", "Other", "Performance", etc.). Tools and users depend on the six standard categories for parsing and scanning. Custom categories break tooling and reduce readability
 6. Breaking changes: use `**BREAKING:**` prefix inside **Changed** or **Removed**. A breaking change from ANY commit type (feat!, fix!, refactor!, etc.) goes in Changed or Removed, not in its original category
 7. Every version gets a compare link at the bottom of the file (reference-style)
-8. Edit and group commit messages into user-facing descriptions. Raw commit messages are noisy, repetitive, and written for developers, not users. The changelog should communicate impact, not implementation
-9. Yanked releases: `## [X.Y.Z] - YYYY-MM-DD [YANKED]`
-10. No intro paragraph ("All notable changes..."). Start with the latest version right after `# Changelog`
-11. This skill does not create `## [Unreleased]` sections. If one exists (added manually by devs): merge or keep its content per user choice, leave it empty after release, update its compare link to point from the new tag to HEAD
+8. An entry ends with the PR/MR links behind it: `([#123](<url>))` on GitHub, `([!123](<url>))` on GitLab, several comma-separated, ascending. No PR behind a commit → no reference; a bare hash is noise and the compare link covers it. Number sources and URL formats: release-create SKILL.md, Step 3 "References"
+9. Edit and group commit messages into user-facing descriptions. Raw commit messages are noisy, repetitive, and written for developers, not users. The changelog should communicate impact, not implementation
+10. Yanked releases: `## [X.Y.Z] - YYYY-MM-DD [YANKED]`
+11. No intro paragraph ("All notable changes..."). Start with the latest version right after `# Changelog`
+12. This skill does not create `## [Unreleased]` sections. If one exists (added manually by devs): merge or keep its content per user choice, leave it empty after release, update its compare link to point from the new tag to HEAD
 
 ## Commit parsing
 
@@ -104,11 +105,11 @@ Good (user-facing, edited):
 
 ### Added
 
-- Feature description from user perspective
+- Feature description from user perspective ([!123](https://gitlab.example.com/owner/repo/-/merge_requests/123))
 
 ### Changed
 
-- **BREAKING:** Changed behavior. Migration: do X instead of Y
+- **BREAKING:** Changed behavior. Migration: do X instead of Y ([!124](https://gitlab.example.com/owner/repo/-/merge_requests/124))
 - Improved performance of feature Z
 
 ### Removed
@@ -137,7 +138,8 @@ After generating changelog content, verify internally (do not output this list).
 9. No commit message dump (entries are edited, grouped, readable)?
 10. Merge commits skipped?
 11. Compare links present and in correct platform format (GitHub vs GitLab)?
-12. Tag convention matches repo (v prefix or bare)?
-13. If RC/pre-release: entries deduplicated across RC tags?
+12. PR/MR references on every entry that has one, deduplicated, ascending, in the platform's format, none invented?
+13. Tag convention matches repo (v prefix or bare)?
+14. If RC/pre-release: entries deduplicated across RC tags?
 
 If any "no", fix before proceeding.

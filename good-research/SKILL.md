@@ -12,12 +12,16 @@ Dispatch a web research task to a chosen backend, then present findings.
 | Backend | Trigger keywords | Execution method |
 |---------|-----------------|------------------|
 | **self** (default) | no backend specified | Agent tool, inherits current model |
-| **codex** | "codexem", "codex" | `codex exec` via Bash |
+| **codex** | "codexem", "codex" | `acpc run codex-researcher` via Bash |
 | **sonnet** | "sonetem", "sonnet" | Agent tool, model: sonnet |
 | **haiku** | "haiku" | Agent tool, model: haiku |
 | **opus** | "opusem", "opus" | Agent tool, model: opus |
 
-Default to **self** when no backend is mentioned.
+When no backend is mentioned:
+- **default mode**: run **self** and **codex** in parallel, then merge (see Merging two reports). A second vendor searches a different index and catches what the first misses. Run self alone when you are Codex yourself, or when `acpc agents get codex-researcher` fails.
+- **quick mode**: **self** only.
+
+A named backend runs alone.
 
 ## Modes
 
@@ -95,50 +99,31 @@ After the agent completes, present its result to the user.
 
 ## Backend: Codex
 
-Pass the prompt via stdin heredoc to avoid escaping issues.
-
-### Default mode
+Dispatched through `acpc` to the `codex-researcher` entry, a Codex variant kept for research so other entries can be re-pointed freely. One-time setup:
 
 ```bash
-OUTPUT="/tmp/codex-research-$(date +%s).md"
-
-codex exec \
-  --skip-git-repo-check \
-  --ephemeral \
-  --full-auto \
-  -s read-only \
-  -c 'model_reasoning_effort="xhigh"' \
-  -o "$OUTPUT" \
-  - <<'RESEARCH_PROMPT'
-<INSERT RESEARCH PROMPT HERE>
-RESEARCH_PROMPT
+acpc agents create codex-researcher --extends codex --permissions edit
 ```
 
-Run with Bash tool: `run_in_background: true`, `timeout: 900000`.
+Codex reaches the web only with `web_search = "live"` in its `config.toml`.
 
-### Quick mode
+1. Make an empty working directory (your scratchpad, or `mktemp -d`) and write `prompt.md` there: the line below, then the research prompt.
+   ```
+   You are the research worker. Do the research yourself: do not load a research skill and do not dispatch other agents.
+   ```
+2. Dispatch, then take `session_id` from the output:
+   ```bash
+   acpc run codex-researcher --bg --cwd "$DIR" --prompt-file "$DIR/prompt.md"
+   ```
+3. In the same turn, wait with Bash `run_in_background: true`, timeout 30m (quick: 10m):
+   ```bash
+   acpc wait <session_id> --timeout 30m --output-file "$DIR/answer.md"
+   ```
+4. Read `$DIR/answer.md` when the wait completes. Progress meanwhile: `acpc log <session_id> --tail 20`.
 
-```bash
-OUTPUT="/tmp/codex-research-$(date +%s).md"
+## Merging two reports
 
-codex exec \
-  --skip-git-repo-check \
-  --ephemeral \
-  --full-auto \
-  -s read-only \
-  -c 'model_reasoning_effort="xhigh"' \
-  -o "$OUTPUT" \
-  - <<'RESEARCH_PROMPT'
-<INSERT QUICK RESEARCH PROMPT HERE>
-RESEARCH_PROMPT
-```
-
-Run with Bash tool: `run_in_background: true`, `timeout: 600000`.
-
-### Codex notes
-
-- The `-` argument reads prompt from stdin. `<<'RESEARCH_PROMPT'` prevents shell expansion
-- After completion, read `$OUTPUT` with Read tool, present to user, then `trash-put "$OUTPUT"`
+Write one report in the output format, not two side by side. Mark findings both workers support, findings only one found, and conflicts with the sources on each side. Verify a conflict or a decisive single-source claim yourself before presenting it as fact.
 
 ## Research Prompts
 
@@ -267,9 +252,9 @@ Topic: {TOPIC}
 
 | Symptom | Backend | Action |
 |---------|---------|--------|
-| Timeout | codex | Inform user, suggest narrowing the topic |
-| Auth error in stderr | codex | Show stderr, suggest `codex login` |
-| Output file missing/empty | codex | Check `which codex`, show stderr |
-| `codex` not found | codex | Tell user: `npm i -g @openai/codex` |
+| Wait times out (exit 124) | codex | The session keeps running: check `acpc log`, then wait again or narrow the topic |
+| Auth error | codex | Show the error, suggest `codex login` |
+| `acpc` or `codex-researcher` missing | codex | Named backend: tell the user the setup command. Default mode: run self alone and say so |
+| Answer without sources | codex | Web search is off: check `web_search` in Codex `config.toml` |
 | Agent returns error | agent | Show error, suggest retrying with different backend |
 | Agent timeout (no output) | agent | Inform user, suggest quick mode or narrower topic |

@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents maintenance
 
-This document governs changes to the standard. It is non-normative and does not affect tool conformance. Its keywords describe admission decisions, not requirements for conforming tools.
+This document governs changes to the standard. It is non-normative and does not affect tool conformance. Its keywords describe admission decisions, not requirements for conforming tools. It states tests, not procedures, and stays as short as the standard.
 
 ## Requirement policy
 
@@ -9,26 +9,75 @@ A candidate requirement must satisfy P1-P6 before it enters the standard.
 - **P1: A requirement MUST address a material caller contract, failure mode, safety risk, or interoperability need.** It SHOULD be supported by an established convention, an observed failure, or explicit engineering reasoning. Aesthetic preferences and implementation taste belong in guidance, not the standard.
 - **P2: A requirement MUST define a verifiable outcome.** Its pass or fail condition MUST be observable through behavior, a contract test, or a deterministic audit. Otherwise it belongs in implementation guidance.
 - **P3: A requirement MUST be placed according to its scope.** It belongs in the standard only if it applies to every conforming tool or states an observable applicability condition explicitly. An isolated narrow recommendation belongs in implementation guidance.
-- **P4: A requirement MUST state the minimum necessary contract once.** It specifies an outcome rather than an implementation mechanism unless the mechanism is necessary for interoperability, safety, or verification. Other rules cross-reference it instead of restating it. Examples and rationale clarify a requirement but do not expand it.
+- **P4: A requirement MUST state the minimum necessary contract once.** It specifies an outcome rather than an implementation mechanism unless the mechanism is necessary for interoperability, safety, or verification. Other rules cross-reference it instead of restating it, in the form Document policy gives. Examples and rationale clarify a requirement but do not expand it.
 - **P5: A requirement MUST use the weakest normative keyword that preserves its purpose.** Its strength and implementation cost MUST be proportionate to the consequence of non-conformance.
 - **P6: A requirement MUST be practical to implement, verify, and maintain throughout the tool's lifecycle.** A requirement that demands disproportionate engineering effort, predictably drifts out of conformance, or lacks a credible implementation path belongs in implementation guidance or MUST be rejected.
 
+A candidate extension name enters the standard only when it names one guarantee a tool cannot provide by accident, and the name alone tells a caller what it may rely on without inspecting each command. A guarantee a caller can only use after reading command detail stays a conditional requirement.
+
+A new reserved field name or `kind` MUST be a multi-word `snake_case` name. A new reserved flag MUST be a multi-word kebab-case long name under H1a unless an established single-word CLI term is necessary for interoperability and the standard defines its meaning. A draft.6 audit of output fields from AWS service models, `gh`, and npm found collisions among the reviewed single-word candidates and none among the multi-word `snake_case` candidates the standard reserved.
+
+A candidate requirement is checked against existing tools that never read this document. One that most such tools already satisfy records a convergence, and the convergence is its justification. One that no such tool satisfies and none contradicts is an addition; it may be right, and it carries an adoption cost a convergence does not. One that several unrelated tools independently decided against needs an argument beyond this document's internal consistency. The kinds are not labels in the standard; the scoring of each version's requirements lives in the maintainers' notes.
+
+## Known limits
+
+Shapes the conformance claim cannot express in this version, each seen in one real tool:
+
+- A unit of effect smaller than a command, such as a subcommand whose argument shape decides whether it mutates (`npm version` versus `npm version patch`). R1 classifies the whole command as `non_idempotent`, so its read-only invocation inherits that declaration.
+- A suite of binaries sharing one flag vocabulary (`systemctl` and the other `*ctl` tools). Each binary claims on its own.
+- A claim per upstream service inside one tool (`aws`). `scope` covers command-path prefixes, which matches services only where the path does.
+- A collection returned in an upstream shape without a boolean equivalent to `has_more` (`aws` `NextToken`). B4c can map a reserved name only when that name already collides, and it cannot supply a missing meaning, so such a command is incompatible under B2a and stays outside the claim.
+
+## Document policy
+
+The standard stays short. Text stays when it helps a reader apply a requirement: it states one, defines a term one uses, resolves an ambiguity in one, shows one working, says why it exists, or says where to read next. Anything else belongs elsewhere or nowhere.
+
+Write for a junior software engineer familiar with basic CLI and JSON concepts.
+Use concrete subjects and actions, and explain a specialized term or metaphor at its first use.
+Prefer common English words and direct phrasing when they keep the exact meaning; a formal synonym or abstract label stays only when it adds precision.
+Present separate steps or conditions in separate sentences or a list, keeping their scope and exceptions explicit.
+Prerequisite concepts come before definitions that depend on them.
+Design principles is non-normative and stays short; detailed rationale sits beside the requirement it explains.
+
+Accommodations for released contracts live under Existing tools. A requirement elsewhere states the baseline and carries no brownfield qualifier; what a released path may keep is a row or clause in that section, not a condition in the requirement. D6 and D7 may describe the fields that declare retained behavior, and a requirement may point to the accommodation that applies; the permission to retain and its conditions are defined only in Existing tools.
+
+A cross-reference names in words what the referenced rule requires, as far as the referring sentence needs it, and the identifier follows the words, so the sentence still says what applies with the identifier removed. The words carry no normative keyword and add no condition; the identifier stays the address of the rule. When a table defines whether a field is present, another rule refers to that condition instead of imposing it again and states only the behavior it adds.
+In source Markdown, link named sections; keep requirement and clause identifiers as plain text.
+
+All examples are non-normative: they explain requirements and add no obligations or exceptions.
+They remain consistent with the requirements they illustrate.
+A standalone example starts with a bold `Example: short description.` label.
+One label covers its connected code blocks, tables, and explanations; a short example within prose uses `For example, ...`.
+An example sits beside the clause it explains and shows the concrete input and outcome needed to resolve the reading problem.
+An example covering several requirements or clauses may sit immediately after the last one it covers.
+Any assumed behavior is stated explicitly.
+Examples are independent fragments unless the text connects them, and an excerpt says that it is one.
+
+A term in Terms names exactly the condition it replaced. When a phrase becomes a term or a definition changes, the old and new conditions are equivalent in both directions, and every use of the term keeps its meaning with the definition expanded in place. A change to a D7 field condition is rechecked against every term that reads that field.
+
+Requirement and clause identifiers are scoped to a version of this document: after inserting, splitting, or removing a clause, later clauses are relettered in reading order and every internal reference still names its intended rule; an external citation names the version.
+
+A readability change keeps every requirement and clause at its identifier and defining place, keeps each field, flag, and `kind` name at the table row that defines it, and keeps tables as the place a reader and an agent look an entry up; an insertion, split, removal, or move of a requirement or clause is its own change under the identifier policy above.
+JSON field-definition tables use `Field`, `JSON type`, `Presence`, and `Value and meaning` columns.
+A field's row states any defined omission meaning.
+Presence conditions distinguish required presence from forbidden presence; neither is a condition on the field's value.
+
 ## Change workflow
 
-1. Make the smallest change that resolves the caller-facing problem.
-2. Read the affected stage in full and inspect every referenced requirement.
-3. Recheck terminology, examples, data flow, brownfield impact, and compatibility.
-4. For a material contract change, review one stable draft independently and deduplicate the findings before editing again.
-5. Run the checks below and review the rendered document before changing its version.
+1. Classify each substantive change as editorial or contractual. An editorial change preserves the subject, required or permitted behavior, applicability conditions, exceptions, and field meanings. If any allowed behavior or caller guarantee changes, classify that part as contractual and record the caller problem and P1-P6 decision in the maintainers' notes.
+2. Make the smallest change that resolves the caller-facing problem.
+3. Read the affected stage in full, every requirement it references, and every passage that references a changed rule; the words before an identifier must still match the rule.
+4. Recheck terminology, examples, data flow, brownfield impact, and compatibility. Track the inputs and effects across the operation being described, distinguishing an internal request from the whole CLI call where relevant.
+5. For a material contract change, review one stable draft independently and deduplicate the findings before editing again.
+6. Run the checks below and review the rendered document. Before changing the version, compare the contract with the previous release against the `0.1.x` promise in Conformance and record the decision. The change record of each draft and release identifies changes to allowed behavior and caller guarantees, including names, types, meanings, keywords, applicability conditions, and exceptions, separately from editorial changes, so an implementer can tell them apart. When a change reletters clauses, the change record lists each moved identifier as old to new, so a citation of the previous version can be mapped.
 
 ## Verification
 
 Run these checks from the `haz-skills` repository root:
 
-- `git diff --check` detects whitespace errors.
-- `rg -n '—|[ \t]+$' cli-design/references/cli-design-standard.md` detects prose em dashes and trailing whitespace. No matches are expected.
-- `rg -n '^\|' cli-design/references/cli-design-standard.md` detects table rows that escaped their containing list. No matches are expected with the current layout.
+- `uv run --no-project python cli-design/scripts/check-standard.py cli-design/references/cli-design-standard.md cli-design/references/cli-design-standard-maintenance.md` parses every fenced `json` block, reads requirement IDs from `### ID:` headings and verifies they are unique and in stage order, reads clause markers (`**R3c:**` at the start of a paragraph) and verifies they belong to the enclosing requirement and run without gaps, rejects a reference to a requirement or clause ID that no checked file defines (so this guide's references are resolved against the standard), verifies that every `"standard"` value in examples equals the version in the header, and rejects em dashes, trailing whitespace, and indented table rows. It prints `file:line` for each problem and exits `1` when any check fails; on success it prints each file's keyword counts for the comparison above.
+- Normative keyword counts (MUST, SHOULD, MAY; `MUST NOT` and `SHOULD NOT` count under their base keyword) are compared with the text before the change, and every difference is accounted for by requirement. Equal totals do not prove equal meaning.
+- `git diff --check` detects whitespace errors in the change itself.
 - `pandoc -f gfm -t html cli-design/references/cli-design-standard.md -o /tmp/cli-design-standard.html` renders the document for inspection.
-- A short `uv run --no-project python` check parses every fenced `json` block, verifies unique requirement IDs, and rejects unresolved references to requirement IDs.
 
-Tests and build steps are N/A unless executable conformance tooling is added later.
+The script checks document invariants only. Conformance of a tool against the standard is not automated.

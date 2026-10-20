@@ -1,6 +1,6 @@
 # CLI Design Standard for Humans and Agents
 
-**Version:** 0.2.0-draft.11
+**Version:** 0.2.0-draft.12
 
 ## Scope
 
@@ -136,7 +136,7 @@ A catalog may list `services` as "Manage services". When that group requires a s
 
 **D5a:** Entry: the introspection command MUST be unambiguous from the arguments alone and MUST NOT dispatch to a domain operation. `schema` as the first argument MUST be reserved for introspection. The introspection command MUST take precedence over any command name the tool resolves from caller configuration or from an executable on the caller's `PATH`.
 
-**D5b:** Consistency: command paths, arguments, flags, and defaults exposed by the introspection output MUST match the parser used at runtime.
+**D5b:** Consistency: command paths, arguments, flags, and defaults (I1c) exposed by the introspection output MUST match the parser used at runtime.
 Shared definitions and generation help keep introspection synchronized with the runtime parser. They do not by themselves establish that the tool's behavior satisfies this standard.
 
 **D5c:** Execution: the introspection command MUST write only JSON to stdout and require no application authentication, configuration, network access, or prompts. It MAY accept global flags without applying them.
@@ -146,7 +146,7 @@ When followed by a command path, it MUST return command detail.
 For a command outside the conformance claim, that detail still matches the parser (D5b), but the D7 requirements do not apply (B2c).
 A command path consists of the segments in D6 `commands[].name`, separated by spaces (U+0020).
 Each segment MUST be passed as a separate argument in that order.
-For a tool with one unnamed command (D6a `command`), any argument after the introspection command is an unknown path.
+For a tool whose only command is the unnamed one (D6a `command`), any argument after the introspection command is an unknown path.
 
 **D5e:** Errors: an unknown path MUST be a usage error. The error MAY suggest valid command paths. A recovery hint can direct the caller to invoke the introspection command without a path to read the command index (D5d, F3b).
 
@@ -188,7 +188,7 @@ For conditional fields in this table, the presence condition is exact: the field
 | `stream` | boolean | MUST, when `delegates_stdout` is not `true`, and success emits a record stream | MUST be `true`. `output` describes one record; the stream is bounded and framed under O7. |
 | `delegates_stdout` | boolean | MUST, when every successful call writes to stdout only the unmodified stdout of a process the command runs | MUST be `true`. `output` and `stream` MUST NOT be present; stdout stays the contract of the process the command runs (O2f). |
 | `output` | object | MUST, when the command can return result data on success or failure, or `changed` is required under R5a, and never when `delegates_stdout` is `true` | O4 JSON Schema shared by success and failure result documents, or describing one O7 record. When R5a requires `changed`, MUST declare it with type `boolean`, or with type `["boolean", "null"]` only when R5a permits `null`. |
-| `output_description` | string | MAY, when `output` is present; required for success-only fields or failure results (O4d, O5a) | Result behavior and field meanings not expressed by the schema or this standard. |
+| `output_description` | string | MAY, when `output` is present; required for success-only fields or failure results (O4d, O5a) | Result behavior and field meanings not expressed by the schema or this standard, such as a numeric field that does not add up across items or a field whose meaning differs from a same-named field of another command. |
 | `exit_codes` | object | MUST, when the command adds or refines tool defaults | F1 additions or refinements that preserve tool-wide meanings. |
 | `format_defaults` | object | MUST, when the command default differs from the tool default | O2 output defaults. |
 | `reserved_overrides` | object | MUST, when the command retains a reserved field name under B4c | B4c map from each such reserved field name to the name that carries this standard's meaning. |
@@ -204,7 +204,7 @@ $ mytool schema
 {
   "schema_version": "1",
   "tool_version": "2.1.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.11", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.12", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean",
      "required": false, "default": false}
@@ -274,7 +274,7 @@ $ hashfile schema
 {
   "schema_version": "1",
   "tool_version": "1.0.0",
-  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.11", "extensions": []},
+  "conformance": {"name": "cli-design-standard", "standard": "0.2.0-draft.12", "extensions": []},
   "global_flags": [
     {"name": "json", "description": "Emit JSON output", "type": "boolean", "required": false, "default": false}
   ],
@@ -298,7 +298,7 @@ $ hashfile schema
 
 ### D8: The introspection contract MUST be stable and versioned.
 
-**D8a:** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. A change that adds an optional introspection or output field MAY keep `schema_version` unchanged. A change that adds a required introspection field, removes an introspection field, or changes an introspection field's type or meaning MUST increment it.
+**D8a:** `schema_version` MUST be a positive decimal integer encoded as a string. Callers should ignore unknown fields. A change that adds an optional introspection or output field MAY keep `schema_version` unchanged. Changes to command output remain subject to the tool-version compatibility rules (D8b). A change that adds a required introspection field, removes an introspection field, or changes an introspection field's type or meaning MUST increment it.
 
 **D8b:** Tool versions documented as compatible MUST preserve existing command paths, input meanings and defaults, exit code meanings, F3 `kind` meanings, and structured output fields. An incompatible change MUST document its replacement and migration; changing `schema_version` alone is insufficient.
 
@@ -337,7 +337,7 @@ The same call, `mytool deploy service-a --env prod --yes --background --json`, c
 
 ### D10: Agent guidance MUST add context.
 
-The tool MAY ship `SKILL.md` or `AGENTS.md` when domain knowledge or workflows need explanation. Guidance MUST point to commands and the introspection output, and SHOULD NOT duplicate their catalogs.
+The tool MAY ship `SKILL.md` or `AGENTS.md` when domain knowledge or workflows need explanation. Guidance MUST point to commands and the introspection output, and SHOULD NOT duplicate their catalogs. The introspection output defines no catalog of tool-defined error kinds, so guidance can describe those kinds and their recovery (D6, D7, F3c).
 
 ## Stage I: Invocation and input
 
@@ -354,7 +354,7 @@ A caller may be a sandboxed process with no keyboard, a producer of generated by
 | `type` | string | MUST, always | Type of each input value: `string`, `integer`, `number`, or `boolean`. For a variadic argument or repeatable flag, this is the type of each array item. |
 | `required` | boolean | MUST, always | `true` means the caller must provide the input. |
 | `default` | string, number, boolean, or array | MUST, when the parser supplies an actual default | The built-in default; values calculated at run time and internal markers for missing input are excluded (I1c). |
-| `enum` | array | MUST, when the parser restricts values to a list of choices | Lists every choice. Every item MUST match `type`. |
+| `enum` | array | MUST, when the parser restricts values to a list of choices | Lists every choice; a spelling the parser maps onto a listed choice is that choice, not another one. Every item MUST match `type`. |
 | `aliases` | array | MAY, on flags | Alternative names without leading hyphens, rendered by the same rule as `name`. If omitted, there are no aliases. |
 | `variadic` | boolean | MAY | MUST NOT be `true` except on the last positional argument. When `true`, that argument collects the remaining positional values into an array in input order; with `required: true`, at least one value is required. If omitted, means `false`. |
 | `repeatable` | boolean | MAY | MUST NOT be `true` except on flags. When `true`, the flag can appear multiple times, and its values form an array in input order. If omitted, means `false`. |
@@ -451,7 +451,7 @@ $ mytool deploy service-a --env prod --manifest - < manifest.json
 
 **I4a:** A command that needs a secret MUST provide a source usable in a *non-interactive context*, such as a credential store, file, stdin, or environment variable. Commands SHOULD use `--token-file PATH` for one secret and `--credentials-file PATH` for structured credentials; either flag SHOULD accept `-` for stdin. Secret-source precedence resolves deterministically and as documented under I2b.
 
-**I4b:** A secret MUST NOT appear in help, introspection output, logs, errors, or normal output unless retrieval is the command's documented purpose.
+**I4b:** A secret the tool uses MUST NOT appear in help, introspection output, logs, errors, or normal output unless retrieval is the command's documented purpose.
 
 With `--token-file token.txt` under `--verbose`, a diagnostic may name the source, such as `Using token from token.txt`, but not the token.
 
@@ -845,6 +845,7 @@ The remaining clauses cover writing the result to a file (O2e) and passing throu
 **O2b:** Machine access: every command MUST accept `--json`. On a *silent command*, `--json` selects the `json` format, and a success MUST write no bytes to stdout. If a command also accepts `--format`, `--json` MUST produce the same output as `--format json` or, on a *stream command*, as `--format ndjson`.
 
 **O2c:** Defaults: a *document or stream command* SHOULD default to human-readable output on a TTY. On non-TTY stdout, a *document or stream command* MUST default to JSON or NDJSON, except that a command whose primary result is a textual document rather than a set of fields or records MAY default to a declared native format such as text or Markdown.
+With stdout on a PTY, the TTY default also applies to a machine caller unless it selects a format explicitly (O2d).
 
 A textual answer with identifying metadata is also a document for this exception.
 A command returning either that answer or its acceptance receipt MAY keep the same declared native default for both.
@@ -958,6 +959,7 @@ In this schema, `progress` is required but nullable, while `warnings` is optiona
 
 Completeness concerns the result promised for that call. A full report about a failed job or failed batch targets is complete data. More pages existing does not make the requested page incomplete.
 The structured error still goes to stderr under the error rules (F2).
+Whitespace inside the JSON value is free, so a command can indent the document when stdout is a TTY; record streams stay one record per line (O7).
 
 **Example: complete and partial results.** This part of a generator's command detail declares its output and when it returns a result on failure:
 
@@ -1333,7 +1335,7 @@ The index still lists every command the tool dispatches, and each listed command
 {
   "conformance": {
     "name": "cli-design-standard",
-    "standard": "0.2.0-draft.11",
+    "standard": "0.2.0-draft.12",
     "extensions": [],
     "scope": ["services"]
   }

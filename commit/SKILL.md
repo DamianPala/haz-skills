@@ -77,7 +77,7 @@ Use heredoc for multi-line messages. Omit empty body/footer (no double blank lin
 
 If pre-commit hooks modify files, re-stage (`git add -u`) and retry. Hooks fail on content: interactive = show error, let user decide; autonomous = fix, retry once, abort if still failing.
 
-Output: commit hash (short), subject, then `git diff --stat HEAD~1` (file list with insertions/deletions). Do NOT push.
+Output: commit hash (short), subject, then `git show --stat --format= HEAD` (the commit's file list with insertions/deletions; `git diff --stat HEAD~1` would also count unstaged changes). Do NOT push.
 
 Never `--no-verify`. Never force push. Never commit secrets or AI trailers.
 

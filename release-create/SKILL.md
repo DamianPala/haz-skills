@@ -188,6 +188,7 @@ After any of the three: rerun Step 4 on both outputs and present them again with
 **6b. Commit CHANGELOG changes** (skip if 6a was skipped, e.g. RC/pre-release):
 - Stage and commit: `git add CHANGELOG.md && git commit -m "docs(changelog): add <version> release notes"`
 - The tag must point to this commit so the tagged state includes the updated CHANGELOG
+- **Pre-publication gate** (the project records a review of the release candidate in a tracked file before publishing): the CHANGELOG commit is the candidate, so make it here (or reuse a release commit that already carries the CHANGELOG and version bump), run the gate, and tag its record commit in 6c, not the CHANGELOG commit. Checks the gate can only run after the push (installing from the public tag) close in one more record commit after the tag; the branch then sits one commit past the tag, which is expected
 
 **6c. Git tag** (tag message = release notes as plain text, strip markdown formatting):
 ```
